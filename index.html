@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <meta name="theme-color" content="#141719" />
 <meta name="description" content="Iron Wreck: combate veicular 3D no Three.js: dez veículos, dano progressivo, latarias destacáveis e três arenas de combate." />
-<title>IRON WRECK v6 — IMPACTO TOTAL</title>
+<title>IRON WRECK v7 — CAÇADA TÁTICA</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -23,6 +23,7 @@
     <button id="photoBtn" class="icon-btn" title="Salvar imagem da batalha (K)">📸</button><button id="soundBtn" class="icon-btn" title="Mudo">♫</button>
   </div>
   <div class="fps-indicator" id="fpsText">FPS · EQUILIBRADO</div>
+  <aside id="aiStatus" class="ai-status hidden" aria-label="Diagnóstico dos adversários"></aside>
   <div class="arena-tag"><span class="tag-dot"></span><span id="arenaName">DESERTO DE FERRO</span> · TODOS CONTRA TODOS</div>
   <div class="hud-bottom">
     <div class="gauges">
@@ -51,7 +52,7 @@
   <div class="eyebrow">COMBATE AUTOMOTIVO 3D · SEM PIEDADE</div>
   <div class="title-logo">IRON <span>WRECK</span></div>
   <div class="tagline">NÃO É UMA CORRIDA. É UMA GUERRA.</div>
-  <p>Escolha entre <b>10 veículos</b>, de ônibus blindado a caminhão de lixo e monster truck. Cada um tem tamanho, peso, dirigibilidade e arma especial próprios. Sobreviva contra <b>7 inimigos armados</b> em <b>3 arenas</b>. Suspensão com molas, derrapagem dinâmica, colisões com impulso, danos localizados e explosões com núcleo luminoso.</p>
+  <p>Escolha entre <b>10 veículos</b>, de ônibus blindado a caminhão de lixo e monster truck. Cada um tem tamanho, peso, dirigibilidade e arma especial próprios. Sobreviva contra <b>7 inimigos armados</b> em <b>3 arenas</b>. IA tática que persegue, flanqueia, usa coberturas, recua quando danificada e procura suprimentos. Física de impacto, suspensão e danos progressivos.</p>
   <div class="section-label">01 <span>ESCOLHA SUA ARENA</span></div>
   <div class="mode-grid">
     <button class="mode-card active" id="raceMode" data-mode="wasteland"><span class="mode-symbol">🏜</span><span><b>DESERTO DE FERRO</b><small>Posto abandonado · sucata · ferro-velho</small></span><span class="mode-arrow">↗</span></button>
@@ -61,11 +62,11 @@
   <div class="section-label">02 <span>ESCOLHA SUA MÁQUINA DE GUERRA · 10 VEÍCULOS DIFERENTES</span></div>
   <div class="garage-grid" id="garageGrid" aria-label="Garagem com dez veículos"></div>
   <div class="settings-row"><label class="control-switch"><input type="checkbox" id="invertToggle" /><span>Inverter direção esquerda/direita (opcional)</span></label>
-  <label class="quality-label" for="qualitySelect">QUALIDADE GRÁFICA <select id="qualitySelect"><option value="low">LEVE</option><option value="medium" selected>EQUILIBRADA</option><option value="high">ALTA</option></select></label></div>
+  <label class="quality-label" for="qualitySelect">QUALIDADE GRÁFICA <select id="qualitySelect"><option value="low">LEVE</option><option value="medium" selected>EQUILIBRADA</option><option value="high">ALTA</option></select></label><label class="quality-label" for="difficultySelect">DIFICULDADE DA IA <select id="difficultySelect"><option value="easy">INICIANTE</option><option value="normal" selected>NORMAL</option><option value="hard">IMPLACÁVEL</option></select></label></div>
   <button class="play-btn" id="startBtn">ENTRAR NA ZONA DE GUERRA <span>➜</span></button>
-  <div class="help-line"><span><kbd>WASD</kbd> DIRIGIR</span><span><kbd>ESPAÇO</kbd> FREIO DE MÃO</span><span><kbd>SHIFT</kbd> NITRO</span><span><kbd>J</kbd> TIRO</span><span><kbd>F</kbd> FOGUETE</span><span><kbd>Q</kbd> ESPECIAL</span><span><kbd>C</kbd> RETROVISOR</span><span><kbd>H</kbd> HUD</span><span><kbd>K</kbd> FOTO PNG</span></div>
+  <div class="help-line"><span><kbd>WASD</kbd> DIRIGIR</span><span><kbd>ESPAÇO</kbd> FREIO DE MÃO</span><span><kbd>SHIFT</kbd> NITRO</span><span><kbd>J</kbd> TIRO</span><span><kbd>F</kbd> FOGUETE</span><span><kbd>Q</kbd> ESPECIAL</span><span><kbd>C</kbd> RETROVISOR</span><span><kbd>H</kbd> HUD</span><span><kbd>K</kbd> FOTO PNG</span><span><kbd>I</kbd> PLANO DOS RIVAIS</span></div>
   <div class="gallery-prompt"><a href="galeria.html" target="_blank" rel="noopener">🖼 VER PRÉVIAS DOS 10 CARROS E DOS 3 CENÁRIOS</a></div>
-  <div class="credits">THREE.JS · ARTE 3D PROCEDURAL · PROTÓTIPO ORIGINAL · v6.0 · IMPACTO TOTAL</div>
+  <div class="credits">THREE.JS · ARTE 3D PROCEDURAL · PROTÓTIPO ORIGINAL · v7.0 · CAÇADA TÁTICA</div>
 </div>
 </section>
 <section id="endScreen" class="screen hidden"><div class="screen-shade"></div><div class="end-content">

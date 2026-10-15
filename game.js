@@ -1,6 +1,6 @@
 let THREE;
 
-// IRON WRECK v5.0 — materiais premium, detalhes de carroceria, cenários e explosões aprimoradas.
+// IRON WRECK v7.0 — combate tático com IA, navegação local, cobertura e recuperação de travamentos.
 const $ = id => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const lerp = (a,b,t) => a+(b-a)*t;
@@ -33,7 +33,7 @@ let garageChoice=0;
 let cars=[], player=null, elapsed=0, mode='wasteland', gameState='menu', frameTime=0, toastUntil=0, comboUntil=0, visualClock=0, followLook, shake=0, lastUi=0, lastMap=0;
 const held = new Set();
 const input = {acc:0, brake:0, steer:0, drift:false, nitro:false};
-let invertSteering=false, photoMode=false, graphicsQuality='medium';
+let invertSteering=false, photoMode=false, graphicsQuality='medium', aiDifficulty='normal', showAiPlans=false;
 const audio = {ctx:null, muted:false, engine:null, engineGain:null, filter:null, musicAt:0, beat:0};
 let clock;
 let frameCount=0, frameAccumulator=0;
@@ -525,6 +525,7 @@ function createKart(color,name,isPlayer=false,vehicleIndex=0){
     lap:1,score:0,wrecks:0,alive:true,invuln:0,isPlayer,steer:0,acc:0,brake:0,useDrift:false,useNitro:false,
     ramCooldown:0,fireCooldown:0,gunCooldown:0,gunHeat:0,gunLocked:false,specialCharge:100,
     boostPadCooldown:0,smokeClock:0,aiOffset:rand(-2,2),aiTarget:null,aiThink:0,
+    aiState:'hunt',aiFlankSide:(cars.length%2?1:-1),aiStuck:0,aiReverse:0,aiLastX:0,aiLastZ:0,aiHeading:0,aiGoal:null,aiPersonality:['hunter','flanker','brawler','scavenger'][cars.length%4],
     lastAttacker:null,damageFlash:0,crashCount:0,garage,vehicleIndex};
   cars.push(car);return car;
 }
@@ -628,7 +629,7 @@ function saveScreenshot(){
   try{
     renderer.render(scene,camera);
     const anchor=document.createElement('a');
-    anchor.download=`IRON-WRECK-v6-${mode}-${Date.now()}.png`;
+    anchor.download=`IRON-WRECK-v7-${mode}-${Date.now()}.png`;
     anchor.href=renderer.domElement.toDataURL('image/png');
     document.body.appendChild(anchor);anchor.click();anchor.remove();
     showToast('📸 FOTO SALVA!',1.6);return true;
@@ -683,7 +684,7 @@ function resetGame(nextMode){
     const vi=roster[i];const c=createKart(i===0?GARAGE[vi].color:COLORS[i],i===0?'VOCÊ':NAMES[i],i===0,vi);
     const a=i*Math.PI*2/8+Math.PI/8,r=58+(i%2)*9;
     c.x=Math.sin(a)*r;c.z=Math.cos(a)*r;c.yaw=Math.atan2(-c.x,-c.z);
-    c.nitro=70;c.ammo=i===0?8:5;c.aiThink=rand(0,.7);
+    c.nitro=70;c.ammo=i===0?8:5;c.aiThink=rand(.05,.35);c.aiLastX=c.x;c.aiLastZ=c.z;
     c.group.position.set(c.x,.7,c.z);c.group.rotation.y=c.yaw;
     if(i===0)player=c;
   }
@@ -731,42 +732,186 @@ function updatePlayerInput(){
 function playerFire(){if(gameState==='playing'&&player?.alive)fireRocket(player);}
 function playerSpecial(){if(gameState==='playing'&&player?.alive)useSpecial(player);}
 function playerItem(){if(gameState==='playing'&&player?.alive)useItem(player);}
-function aiSteer(c,dt){
-  if(!c.alive)return;
-  c.aiThink-=dt;
-  if(!c.aiTarget||!c.aiTarget.alive||c.aiThink<=0){
-    const valid=cars.filter(other=>other!==c&&other.alive);
-    c.aiTarget=valid.length?valid.sort((a,b)=>vec2Dist(a,c)-vec2Dist(b,c))[0]:null;
-    c.aiThink=rand(.4,.85);
-  }
-  const target=c.aiTarget||player;
-  if(!target||!target.alive){c.acc=0;c.steer=0;return;}
-  const distance=vec2Dist(c,target);
-  let tx=target.x+Math.sin(target.yaw)*clamp(distance*.25,3,14);
-  let tz=target.z+Math.cos(target.yaw)*clamp(distance*.25,3,14);
-  if((mode==='city'&&Math.max(Math.abs(c.x),Math.abs(c.z))>72)|| (mode==='wasteland'&&Math.hypot(c.x,c.z)>74)){
-    tx=-c.x*.3;tz=-c.z*.3;
-  }
-  // IA desvia de obstáculos sólidos em vez de dirigir contra eles continuamente.
-  const desired=Math.atan2(tx-c.x,tz-c.z);
-  let delta=angleWrap(desired-c.yaw);
+// Geometria 2D do combate: a IA e as armas respeitam as mesmas coberturas.
+function segmentCircleFraction(x0,z0,x1,z1,cx,cz,r){
+  const dx=x1-x0,dz=z1-z0,den=dx*dx+dz*dz;
+  if(den<1e-8)return Math.hypot(x0-cx,z0-cz)<=r?0:null;
+  const t=clamp(((cx-x0)*dx+(cz-z0)*dz)/den,0,1);
+  const px=x0+dx*t,pz=z0+dz*t;
+  return (px-cx)**2+(pz-cz)**2<=r*r?t:null;
+}
+function firstCoverOnLine(x0,z0,x1,z1,padding=0){
+  let result=null,best=Infinity;
   for(const o of obstacles){
     if(o.level!==mode)continue;
-    const dist=Math.hypot(o.x-c.x,o.z-c.z);
-    const err=angleWrap(Math.atan2(o.x-c.x,o.z-c.z)-c.yaw);
-    if(dist<o.r+17&&Math.abs(err)<.6){delta+=err>=0?-.8:.8;break;}
+    const t=segmentCircleFraction(x0,z0,x1,z1,o.x,o.z,o.r+padding);
+    if(t!==null&&t<best){best=t;result={t,object:o,crate:false};}
   }
-  c.steer=clamp(delta*1.8,-1,1);
-  const desiredSpeed=(distance<16?16:distance<30?26:36)*c.garage.speed;
-  c.acc=c.speed<desiredSpeed?1:0;c.brake=c.speed>desiredSpeed+5?1:0;
-  c.useDrift=Math.abs(delta)>.75&&c.speed>22;
-  c.useNitro=c.nitro>35&&c.speed>17&&Math.abs(delta)<.2&&distance>27&&Math.random()<.012;
-  if(c.useNitro)c.boostTime=1.2;
-  c.useNitro=c.boostTime>0&&c.nitro>2;
-  const aiming=Math.abs(angleWrap(Math.atan2(target.x-c.x,target.z-c.z)-c.yaw));
-  if(distance<62&&aiming<.18){if(Math.random()<.62)fireMachineGun(c);if(distance<48&&Math.random()<.009)fireRocket(c);}
-  if(c.item&&Math.random()<.004)useItem(c);
-  if(c.specialCharge>=100&&distance<23&&Math.random()<.006)useSpecial(c);
+  for(const o of crates){
+    if(!o.alive||o.level!==mode)continue;
+    const t=segmentCircleFraction(x0,z0,x1,z1,o.x,o.z,o.r+padding);
+    if(t!==null&&t<best){best=t;result={t,object:o,crate:true};}
+  }
+  return result;
+}
+function aiHasLineOfSight(c,target){
+  const dx=target.x-c.x,dz=target.z-c.z,length=Math.hypot(dx,dz);
+  if(length<.01)return true;
+  const start=Math.min(c.radius*.63,length*.35);
+  return !firstCoverOnLine(c.x+dx/length*start,c.z+dz/length*start,target.x,target.z,.35);
+}
+function aiArenaContains(x,z,r=0){
+  const limit=ARENA_RADIUS-6-r;
+  if(mode==='wasteland')return x*x+z*z<=limit*limit;
+  return Math.abs(x)<=limit&&Math.abs(z)<=limit;
+}
+// Somente seleção tática usa saúde, acessibilidade, suprimentos e ameaça.
+function aiChooseTarget(c){
+  let best=null,score=Infinity;
+  for(const enemy of cars){
+    if(enemy===c||!enemy.alive)continue;
+    const d=vec2Dist(c,enemy);
+    let s=d+(enemy.hp/100)*13;
+    if(enemy===c.aiTarget)s-=12; // persistência evita mudanças bruscas de objetivo.
+    if(enemy===c.lastAttacker)s-=16;
+    if(aiHasLineOfSight(c,enemy))s-=7;
+    if(s<score){score=s;best=enemy;}
+  }
+  return best;
+}
+function aiNearestPickup(c){
+  let best=null,dist=Infinity;
+  for(const p of pickups){
+    if(p.level!==mode||p.respawn>0||!p.group.visible)continue;
+    const d=Math.hypot(c.x-p.x,c.z-p.z);
+    if(d<dist){dist=d;best=p;}
+  }
+  return best;
+}
+function aiChooseCover(c,target){
+  if(!target)return null;
+  let best=null,score=Infinity;
+  for(const o of obstacles){
+    if(o.level!==mode)continue;
+    const d=Math.hypot(o.x-c.x,o.z-c.z),enemyDistance=Math.hypot(o.x-target.x,o.z-target.z);
+    if(d>38||enemyDistance>48||d<o.r+c.radius+2)continue;
+    const vx=o.x-target.x,vz=o.z-target.z,vl=Math.hypot(vx,vz)||1;
+    const gap=o.r+c.radius+3.5;
+    const x=o.x+vx/vl*gap,z=o.z+vz/vl*gap;
+    if(!aiArenaContains(x,z,c.radius))continue;
+    const cost=Math.hypot(x-c.x,z-c.z)+enemyDistance*.2;
+    if(cost<score){score=cost;best={x,z};}
+  }
+  return best;
+}
+function aiChooseTactics(c,target){
+  const supply=aiNearestPickup(c),d=vec2Dist(c,target);
+  const urgent=c.hp<30,lowAmmo=c.ammo<1,moreResources=c.hp<45||c.ammo<2;
+  if(c.item==='repair'&&c.hp<55)useItem(c);
+  else if(c.item==='shield'&&d<29&&c.shield<1)useItem(c);
+  else if(c.item==='boost'&&d>32)useItem(c);
+  else if(c.item==='emp'&&d<23)useItem(c);
+  else if(c.item==='mine'&&d<13)useItem(c);
+  // Se não há uma caixa disponível, a IA não fica eternamente recuando.
+  if(moreResources&&supply&&Math.hypot(c.x-supply.x,c.z-supply.z)<65){
+    c.aiState='resupply';c.aiGoal={x:supply.x,z:supply.z};return;
+  }
+  if(urgent&&d<24){
+    c.aiState='retreat';
+    const angle=Math.atan2(c.x-target.x,c.z-target.z);
+    c.aiGoal={x:clamp(c.x+Math.sin(angle)*28,-76,76),z:clamp(c.z+Math.cos(angle)*28,-76,76)};
+    return;
+  }
+  const personality=c.aiPersonality,cover=(personality==='scavenger'||personality==='flanker')&&c.hp<70?aiChooseCover(c,target):null;
+  if(cover&&d<53){c.aiState='ambush';c.aiGoal=cover;return;}
+  if(personality==='flanker'||(personality==='hunter'&&d<45)){
+    c.aiState='flank';
+    const side=c.aiFlankSide,offset=clamp(d*.42,9,21),lead=clamp(d*.12,2,8);
+    c.aiGoal={x:target.x+Math.cos(target.yaw)*offset*side+Math.sin(target.yaw)*lead,
+              z:target.z-Math.sin(target.yaw)*offset*side+Math.cos(target.yaw)*lead};
+  }else{
+    c.aiState='hunt';
+    const lead=clamp(d*.16,2,11);
+    c.aiGoal={x:target.x+Math.sin(target.yaw)*lead,z:target.z+Math.cos(target.yaw)*lead};
+  }
+  // blindagem pesada persegue sem recuar; os leves tentam ângulos laterais.
+  if(personality==='brawler'&&c.garage.mass>=1.5)c.aiGoal={x:target.x,z:target.z};
+}
+// Local steering por amostragem: escolhe o caminho mais livre sem pathfinding caro.
+// A mesma rotina funciona em deserto circular, quadras da cidade e porto.
+function aiNavigate(c,goal){
+  const desired=Math.atan2(goal.x-c.x,goal.z-c.z);
+  const look=clamp(12+Math.max(0,c.speed)*.32,14,29);
+  let heading=desired,best=-Infinity;
+  const blocks=[];
+  for(const o of obstacles)if(o.level===mode)blocks.push({x:o.x,z:o.z,r:o.r});
+  for(const o of crates)if(o.level===mode&&o.alive)blocks.push({x:o.x,z:o.z,r:o.r});
+  for(const other of cars)if(other!==c&&other.alive&&vec2Dist(c,other)<32)blocks.push({x:other.x,z:other.z,r:other.radius*.78});
+  const offsets=[0,.28,-.28,.56,-.56,.92,-.92,1.36,-1.36,2.1,-2.1];
+  for(const offset of offsets){
+    const a=desired+offset,x=c.x+Math.sin(a)*look,z=c.z+Math.cos(a)*look;
+    const boundary=aiArenaContains(x,z,c.radius+1);
+    let penalty=boundary?0:50;
+    // Veículos parados e caixotes são obstáculos temporários.
+    for(const o of blocks){
+      const rr=o.r+c.radius+2.2,d=Math.hypot(o.x-c.x,o.z-c.z);
+      if(d>look+rr)continue;
+      const t=segmentCircleFraction(c.x,c.z,x,z,o.x,o.z,rr);
+      if(t!==null){
+        // Contatos muito próximos exigem manobra mais forte; evita colisões frontais.
+        penalty+=t<.12?25:44*(1-t)+9;
+      }
+    }
+    const alignment=Math.abs(angleWrap(a-c.yaw));
+    const score=-Math.abs(offset)*7-alignment*2.3-penalty;
+    if(score>best){best=score;heading=a;}
+  }
+  return heading;
+}
+function aiSteer(c,dt){
+  if(!c.alive)return;
+  const cfg={easy:{reaction:.9,aim:.16,gun:3.4,rocket:.17},normal:{reaction:.55,aim:.22,gun:7.2,rocket:.53},hard:{reaction:.28,aim:.30,gun:10.4,rocket:.87}}[aiDifficulty];
+  c.aiThink-=dt;
+  if(!c.aiTarget||!c.aiTarget.alive||c.aiThink<=0){
+    c.aiTarget=aiChooseTarget(c);
+    if(c.aiTarget)aiChooseTactics(c,c.aiTarget);
+    c.aiThink=cfg.reaction*(.8+Math.random()*.4);
+  }
+  const target=c.aiTarget;
+  if(!target||!target.alive){c.acc=0;c.brake=1;c.steer=0;return;}
+  const d=vec2Dist(c,target),goal=c.aiGoal||target;
+  // Progresso em metros por segundo, não por frame (menos dependente de FPS).
+  const progress=Math.hypot(c.x-c.aiLastX,c.z-c.aiLastZ);
+  if(c.acc>0&&Math.abs(c.speed)<7&&progress<dt*2)c.aiStuck+=dt;
+  else c.aiStuck=Math.max(0,c.aiStuck-dt*.75);
+  c.aiLastX=c.x;c.aiLastZ=c.z;
+  if(c.aiStuck>1.7&&c.aiReverse<=0){c.aiReverse=1.15;c.aiStuck=0;c.aiFlankSide*=-1;c.aiThink=0;}
+  if(c.aiReverse>0){
+    c.aiReverse-=dt;c.aiState='unstuck';c.acc=0;c.brake=1;
+    c.steer=c.aiFlankSide*.85;c.useDrift=false;c.useNitro=false;
+    return;
+  }
+  const heading=aiNavigate(c,goal);
+  const delta=angleWrap(heading-c.yaw);
+  c.aiHeading=heading;
+  c.steer=clamp(delta*1.7,-1,1);
+  const sharp=Math.abs(delta)>.7,closing=c.aiState==='ambush'&&Math.hypot(goal.x-c.x,goal.z-c.z)<10;
+  const desiredSpeed=(c.aiState==='retreat'?49:c.aiState==='resupply'?38:closing?13:sharp?19:d<19?22:40)*c.garage.speed;
+  c.acc=c.speed<desiredSpeed?1:0;
+  c.brake=c.speed>desiredSpeed+4?1:0;
+  c.useDrift=sharp&&c.speed>22;
+  const hasSight=aiHasLineOfSight(c,target);
+  c.useNitro=c.nitro>34&&d>31&&!sharp&&c.aiState!=='ambush'&&c.aiState!=='resupply'&&c.aiState!=='retreat'&&c.hp>25;
+  if(c.useNitro&&c.nitro<38)c.useNitro=false;
+  const aiming=aimTo(c,target);
+  if(hasSight&&d<75&&aiming<cfg.aim){
+    if(Math.random()<1-Math.exp(-cfg.gun*dt))fireMachineGun(c);
+    if(d<62&&c.ammo>0&&Math.random()<1-Math.exp(-cfg.rocket*dt))fireRocket(c);
+  }
+  if(c.specialCharge>=100&&d<32&&aiming<.8&&hasSight)useSpecial(c);
+  if(c.item&&c.item!=='repair'&&Math.random()<1-Math.exp(-.15*dt)){
+    if((c.item==='shield'&&d<30)||(c.item==='emp'&&d<23)||(c.item==='mine'&&d<14))useItem(c);
+  }
 }
 // Molas com amortecimento por eixo, com balanço do chassi e recomposição
 // numérica independente da taxa de quadros (dt limitado no loop).
@@ -1048,6 +1193,11 @@ function fireMachineGun(c){
     const lateral=Math.abs(ox*dz-oz*dx);
     if(lateral<enemy.radius+along*.018){nearest=enemy;distance=along;}
   }
+  const cover=firstCoverOnLine(muzzleX,muzzleZ,muzzleX+dx*distance,muzzleZ+dz*distance,.1);
+  if(cover){
+    const clipped=Math.max(.4,distance*cover.t);
+    if(clipped<distance){distance=clipped;nearest=null;}
+  }
   const endX=muzzleX+dx*distance,endZ=muzzleZ+dz*distance;
   const geometry=new THREE.CylinderGeometry(.065,.095,distance,5);
   const tracer=mesh(geometry,new THREE.MeshBasicMaterial({color:c.isPlayer?0xffe28a:0xff6d62,transparent:true,opacity:.85}),
@@ -1136,7 +1286,16 @@ function fireRocket(c,force=false,spread=0){
 function updateMissiles(dt){
   for(let i=tracers.length-1;i>=0;i--){const t=tracers[i];t.ttl-=dt;if(t.ttl<=0){scene.remove(t.mesh);t.mesh.geometry.dispose();t.mesh.material.dispose();tracers.splice(i,1);}}
   for(let i=missiles.length-1;i>=0;i--){
-    const m=missiles[i];m.ttl-=dt;m.x+=Math.sin(m.yaw)*m.speed*dt;m.z+=Math.cos(m.yaw)*m.speed*dt;
+    const m=missiles[i],oldX=m.x,oldZ=m.z;
+    m.ttl-=dt;m.x+=Math.sin(m.yaw)*m.speed*dt;m.z+=Math.cos(m.yaw)*m.speed*dt;
+    const cover=firstCoverOnLine(oldX,oldZ,m.x,m.z,.3);
+    if(cover){
+      const x=lerp(oldX,m.x,cover.t),z=lerp(oldZ,m.z,cover.t);
+      m.x=x;m.z=z;
+      if(cover.crate){cover.object.alive=false;cover.object.group.visible=false;m.owner.score+=40;}
+      for(const c of cars)if(c!==m.owner&&c.alive&&Math.hypot(c.x-x,c.z-z)<8.5)takeDamage(c,12,m.owner);
+      emitExplosion(x,z,0xffae55,18,3.6);disposeDynamic(m.mesh);missiles.splice(i,1);continue;
+    }
     m.mesh.position.set(m.x,2.8+Math.sin(elapsed*24)*.14,m.z);
     if(Math.random()<.7)emitSpark(m.x-Math.sin(m.yaw)*1.5,m.z-Math.cos(m.yaw)*1.5,0xffac36,.8,2.2);
     let hit=null;
@@ -1300,6 +1459,10 @@ function updateUI(force=false){
   $('ammo').textContent=`× ${player.ammo}`;
   if(toastUntil&&elapsed>toastUntil){$('toast').classList.remove('show');toastUntil=0;}
   if(comboUntil&&elapsed>comboUntil){$('combo').classList.remove('show');comboUntil=0;}
+  if(showAiPlans){
+    const labels={hunt:'PERSEGUINDO',flank:'FLANQUEANDO',ambush:'EM COBERTURA',resupply:'SUPRIMENTOS',retreat:'RECUANDO',unstuck:'DESATOLANDO'};
+    $('aiStatus').textContent=cars.filter(c=>!c.isPlayer&&c.alive).map(c=>`${c.name} · ${labels[c.aiState]||c.aiState} · ${Math.ceil(c.hp)}%`).join('\n');
+  }
   if(elapsed-lastMap>.13){lastMap=elapsed;drawMinimap();}
 }
 function initializeAudio(){
@@ -1426,6 +1589,7 @@ function registerControls(){
   }));
   $('invertToggle').addEventListener('change',ev=>{invertSteering=!!ev.target.checked;});
   $('qualitySelect').addEventListener('change',ev=>chooseGraphicsQuality(ev.target.value));
+  $('difficultySelect').addEventListener('change',ev=>{aiDifficulty=['easy','normal','hard'].includes(ev.target.value)?ev.target.value:'normal';});
   window.addEventListener('pointerdown',ev=>{if(ev.button===0&&ev.target===renderer?.domElement)held.add('Mouse0');});
   window.addEventListener('pointerup',()=>held.delete('Mouse0'));
   for(const card of document.querySelectorAll('.mode-card'))card.addEventListener('click',()=>{
@@ -1450,6 +1614,7 @@ function registerControls(){
     if(ev.code==='KeyR'&&gameState==='ended')resetGame(mode);
     if(ev.code==='KeyH')togglePhotoMode();
     if(ev.code==='KeyK'&&(gameState==='playing'||gameState==='paused'))saveScreenshot();
+    if(ev.code==='KeyI'){showAiPlans=!showAiPlans;$('aiStatus').classList.toggle('hidden',!showAiPlans);updateUI(true);}
     if(ev.code==='Enter'&&gameState==='menu')resetGame(document.querySelector('.mode-card.active').dataset.mode);
   });
   window.addEventListener('keyup',ev=>held.delete(ev.code));
