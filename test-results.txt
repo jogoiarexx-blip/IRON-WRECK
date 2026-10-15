@@ -1,0 +1,21 @@
+IRON WRECK v6.0 — TESTES AUTOMATIZADOS
+
+PASS  node --check game.js — sintaxe JavaScript
+PASS  node tests/smoke-test.js — direção corrigida, 10 veículos,
+      3 arenas, 30 combinações, metralhadora, foguetes, especiais,
+      colisões, reparo, dano, vitória e derrota.
+PASS  node tests/visual-smoke.js — >=85 peças por carro,
+      animação das rodas, ondas de choque, preset gráfico e galeria.
+PASS  node tests/physics-v6.test.js — transferência de momento na batida,
+      ônibus vs carro, conservação arcade, suspensão com molas,
+      deslizamento lateral, amassados localizados,
+      núcleo de explosão e limpeza; 3.000 quadros simulados em 30 combinações.
+PASS  node tests/export_geometry.js — 10 modelos e 3 arenas exportados.
+PASS  python tests/render_previews.py — imagens geradas em software VTK.
+
+LIMITAÇÕES:
+- WebGL em Chrome/Edge reais: NÃO VALIDADO, pois CDN do Three.js
+  é inacessível nesta execução. Requer conexão ao executar o jogo.
+- FPS em máquina Windows e comportamento de controle em hardware real:
+  NÃO MEDIDOS. Os testes não substituem avaliação jogando.
+- Galeria: geometrias renderizadas no VTK, não capturas do gameplay.
