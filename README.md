@@ -52,3 +52,8 @@ A opção de inverter a direção fica na garagem.
 No pacote-fonte da v7, os testes automatizados de lógica passaram, incluindo `tests/ai-v7.test.js`. Isso **não** comprova o desempenho gráfico ou a renderização WebGL no navegador. A publicação estática não exige compilação, mas precisa de internet para carregar a biblioteca Three.js.
 
 O projeto é um protótipo original e não usa assets comerciais dos jogos que o inspiraram.
+
+
+## v7.1 — otimização Three.js
+
+430 detalhes visuais estáticos (102 marcas, 160 janelas, 168 nervuras) foram agrupados em 3 `InstancedMesh`, preservando física, armas e IA. Testes sintéticos passaram; FPS real não foi medido. Veja [pesquisa open source](OPEN_SOURCE_PLANO.md).

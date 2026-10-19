@@ -19,3 +19,10 @@ LIMITAÇÕES:
 - FPS em máquina Windows e comportamento de controle em hardware real:
   NÃO MEDIDOS. Os testes não substituem avaliação jogando.
 - Galeria: geometrias renderizadas no VTK, não capturas do gameplay.
+
+
+v7.1 (19/10/2026) — InstancedMesh
+- node --check game.js: PASS
+- smoke-test.js, ai-v7.test.js, physics-v6.test.js, visual-smoke.js: PASS
+- 430 detalhes decorativos em 3 lotes de InstancedMesh
+- FPS/WebGL real: não validado.

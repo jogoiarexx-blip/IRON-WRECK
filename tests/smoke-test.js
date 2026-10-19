@@ -13,7 +13,7 @@ class V3 {
 class Node {
   constructor(geo,material){this.geometry=geo;this.material=material||{};this.position=new V3();this.rotation={x:0,y:0,z:0,set(x,y,z){this.x=x;this.y=y;this.z=z;}};this.scale={x:1,y:1,z:1,set(x,y,z){this.x=x;this.y=y;this.z=z;},setScalar(v){this.x=v;this.y=v;this.z=v;}};this.children=[];this.visible=true;this.shadow={mapSize:{set(){}},camera:{}};}
   add(m){this.children.push(m);}remove(m){this.children=this.children.filter(c=>c!==m);}
-  lookAt(){}updateProjectionMatrix(){}
+  lookAt(){}updateProjectionMatrix(){}updateMatrix(){this.matrix={matrixId:Math.random()};}
 }
 class Geo {setAttribute(){return this;}setIndex(){return this;}computeVertexNormals(){}dispose(){}}
 class Mat {constructor(props={}){Object.assign(this,props);if(typeof this.color==='number')this.color={setHex(){}};}dispose(){}set(){return this;}setHex(){return this;}}
@@ -27,6 +27,12 @@ const T={Vector3:V3,Scene:Node,Group:Node,Mesh:Node,Sprite:Node,CatmullRomCurve3
  WebGLRenderer:class{constructor(){this.domElement={};this.shadowMap={};}setSize(){}setPixelRatio(){}render(){}},
  PCFSoftShadowMap:1,ACESFilmicToneMapping:1,SRGBColorSpace:1,DoubleSide:2};
 for(const c of classes)T[c]=Geo;
+class FakeInstancedMesh extends Node {
+  constructor(g,m,n){super(g,m);this.count=n;this.isInstancedMesh=true;this.instanceMatrix={needsUpdate:false};this.matrices=[];}
+  setMatrixAt(i,m){this.matrices[i]=m;}
+  computeBoundingSphere(){}
+}
+T.Object3D=Node;T.InstancedMesh=FakeInstancedMesh;
 const nodes=new Map();
 function el(id){if(!nodes.has(id))nodes.set(id,{style:{},classList:{add(){},remove(){},toggle(){}},textContent:'',innerHTML:'',dataset:{mode:'race'},appendChild(){},addEventListener(){},getContext(){return canvasContext;}});return nodes.get(id);}
 const canvasContext={fillRect(){},strokeRect(){},fillText(){},clearRect(){},beginPath(){},arc(){},ellipse(){},rect(){},closePath(){},moveTo(){},lineTo(){},stroke(){},fill(){}};
@@ -45,6 +51,11 @@ vm.runInContext(src,context,{filename:'game.js'});
 vm.runInContext('THREE=three; particleGeo=new THREE.IcosahedronGeometry();followLook=new THREE.Vector3();clock=new THREE.Clock();',vm.createContext(Object.assign(context,{three:T})));
 function run(expr){return vm.runInContext(expr,context);}
 run('setup3D()');
+assert.equal(run("battlefields.city.children.filter(m=>m.isInstancedMesh).length"),2,'Cidade deve ter 2 lotes de instancing');
+assert.equal(run("battlefields.city.children.filter(m=>m.isInstancedMesh).reduce((n,m)=>n+m.count,0)"),262,'102 marcas + 160 janelas');
+assert.equal(run("battlefields.harbor.children.filter(m=>m.isInstancedMesh).length"),1,'Porto deve ter 1 lote de instancing');
+assert.equal(run("battlefields.harbor.children.filter(m=>m.isInstancedMesh)[0].count"),168,'14 contêineres * 12 nervuras');
+console.log('PASS: InstancedMesh reduz 430 objetos decorativos a 3 draw calls de malha (não contabiliza materiais/sombras).');
 // Screen-aligned controls: camera behind a +Z-facing car sees world -X on screen-right.
 run("resetGame('wasteland'); player.x=0;player.z=0;player.yaw=0;player.speed=0;held.clear();held.add('KeyW')");
 run('updatePlayerInput();moveCar(player,1/10)');

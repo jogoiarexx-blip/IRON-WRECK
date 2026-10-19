@@ -44,6 +44,23 @@ function mesh(geo,material,x=0,y=0,z=0,parent=scene){
   const m=new THREE.Mesh(geo,material);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
 }
 function box(w,h,d,material,x,y,z,parent){return mesh(new THREE.BoxGeometry(w,h,d),material,x,y,z,parent);}
+// InstancedMesh (Three.js MIT) agrupa decoração estática sem alterar colisões.
+// Somente meshes que não precisam de danos/animação individual entram nos lotes.
+function batchStaticBoxes(parent,material,items){
+  if(!items.length)return null;
+  const batch=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),material,items.length);
+  const dummy=new THREE.Object3D();
+  for(let i=0;i<items.length;i++){
+    const [x,y,z,w,h,d,rotation=0]=items[i];
+    dummy.position.set(x,y,z);dummy.rotation.set(0,rotation,0);
+    dummy.scale.set(w,h,d);dummy.updateMatrix();batch.setMatrixAt(i,dummy.matrix);
+  }
+  batch.instanceMatrix.needsUpdate=true;
+  batch.computeBoundingSphere?.();
+  batch.castShadow=false;batch.receiveShadow=true;batch.frustumCulled=false;
+  parent.add(batch);
+  return batch;
+}
 function sphere(r,material,x,y,z,parent,width=9,height=7){return mesh(new THREE.SphereGeometry(r,width,height),material,x,y,z,parent);}
 function cylinder(top,bottom,height,material,x,y,z,parent,segments=12){return mesh(new THREE.CylinderGeometry(top,bottom,height,segments),material,x,y,z,parent);}
 function makeCanvasText(txt,back='#151c37',foreground='#ffffff',scale=1){
@@ -187,11 +204,13 @@ function buildDeadCity(){
     const ln=box(1,.04,177,i===0?paint:slab,i*24,.05,0,g);ln.castShadow=false;
     const cross=box(177,.04,1,i===0?paint:slab,0,.05,i*24,g);cross.castShadow=false;
   }
+  const roadMarks=[];
   for(let i=-1;i<=1;i++)for(let j=0;j<17;j++){
     const z=-78+j*9.3,x=i*35;
-    box(.22,.05,4.2,paint,x,.09,z,g).castShadow=false;
-    box(4.2,.05,.22,paint,z,.09,x,g).castShadow=false;
+    roadMarks.push([x,.09,z,.22,.05,4.2],[z,.09,x,4.2,.05,.22]);
   }
+  batchStaticBoxes(g,paint,roadMarks);
+  const facadeWindows=[];
   for(let i=0;i<40;i++){
     const side=i%4,loc=-83+(i/4|0)*18.2;
     const x=side===0?-91:side===1?91:loc;
@@ -199,9 +218,10 @@ function buildDeadCity(){
     const w=16,h=rand(14,43);
     box(w,h,w,mat(choose([0x5c6a7a,0x77818e,0x4d5868,0x876956])),x,h/2,z,g).castShadow=false;
     for(let k=1;k<5;k++){
-      box(9,.8,.16,glass,x,k*h/5,z+(side%2===0?1:-1)*8.1,g).castShadow=false;
+      facadeWindows.push([x,k*h/5,z+(side%2===0?1:-1)*8.1,9,.8,.16]);
     }
   }
+  batchStaticBoxes(g,glass,facadeWindows);
   for(const [x,z,w,h,d] of [[-35,-28,18,12,18],[35,25,16,17,19],[-31,37,12,9,23],[35,-36,21,13,13]]){
     const building=box(w,h,d,steel,x,h/2,z,g);
     box(w+2,.6,d+2,M.dark,x,h,z,g);
@@ -249,16 +269,22 @@ function buildHarbor(){
   const layouts=[[-53,-56,0],[-53,-22,1],[-53,15,0],[-53,53,1],
     [53,-53,1],[53,-17,0],[53,20,1],[53,55,0],
     [-18,-56,1],[17,-56,0],[-18,54,0],[17,54,1],[-35,0,1],[35,0,0]];
+  const containerRibs=[];
   layouts.forEach(([x,z,rot],i)=>{
     const group=new THREE.Group();group.position.set(x,0,z);group.rotation.y=rot?Math.PI/2:0;g.add(group);
     const paint=mat([0xb65835,0x3d87a5,0xb6a052,0x667c56,0x99554f][i%5],.75,.33);
     const h= i%3===0?8.8:6.5;
     box(9,h,17,paint,0,h/2,0,group);
-    for(const side of [-1,1])for(let k=-6;k<=6;k+=2.1)box(.14,h-.8,.12,metal,side*4.58,h/2,k,group);
+    for(const side of [-1,1])for(let k=-6;k<=6;k+=2.1){
+      const xx=side*4.58;
+      // Instâncias no espaço da arena; mantêm a rotação do contêiner.
+      containerRibs.push(rot?[x+k,h/2,z-xx,.14,h-.8,.12,Math.PI/2]:[x+xx,h/2,z+k,.14,h-.8,.12]);
+    }
     for(const y of [1,h-1])box(9.2,.17,17.2,metal,0,y,0,group);
     for(const xx of [-3.3,3.3])box(.3,h-.7,.16,metal,xx,h/2,8.56,group);
     addObstacle(x,z,rot?10.2:7.7,level,'container');
   });
+  batchStaticBoxes(g,metal,containerRibs);
   // Guindastes monumentais, tanques e farol no perímetro.
   for(const [x,z] of [[-75,-75],[75,-75],[75,75]]){
     for(const dx of [-6,6])for(const dz of [-5,5])box(1.25,35,1.25,yellow,x+dx,17.5,z+dz,g);
