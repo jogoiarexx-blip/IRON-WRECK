@@ -52,8 +52,8 @@ const GARAGE = [
 // Raio físico escalado com o comprimento e largura: ônibus e caminhões são alvos maiores.
 const bodyRadius = vehicle => Math.max(vehicle.width*.54,vehicle.length*.34)+.05;
 const aimTo = (from,to) => Math.abs(angleWrap(Math.atan2(to.x-from.x,to.z-from.z)-from.yaw));
-const PICKUP_TYPES = ['shield','emp','repair','boost','mine'];
-const ITEMS = {shield:['🛡️','ESCUDO'],emp:['⚡','CHOQUE'],repair:['💚','REPARO'],boost:['🔥','SUPER NITRO'],mine:['💣','MINA']};
+const PICKUP_TYPES = ['rocket','emp','mine','shield','repair','boost'];
+const ITEMS = {rocket:['🚀','FOGUETES'],shield:['🛡️','ESCUDO'],emp:['⚡','CHOQUE'],repair:['💚','REPARO'],boost:['🔥','SUPER NITRO'],mine:['💣','MINA']};
 const ARENA_RADIUS = 90;
 let renderer, scene, camera, sun, pickups=[], crates=[], debris=[], missiles=[], mines=[], tracers=[], scrapParts=[], blastRings=[], impactFlashes=[], obstacles=[], battlefields={};
 let garageChoice=0;
@@ -161,11 +161,49 @@ function buildBattlefields(){
 function addObstacle(x,z,r,level,kind='concrete'){
   obstacles.push({x,z,r,level,kind});
 }
+// Um pickup tem tipo FIXO e objeto visível, não é sorteado ao ser apanhado.
+const PICKUP_COLORS={rocket:0xffb046,emp:0x6ce8ff,mine:0xff5773,shield:0x73bdff,repair:0x7cf3a0,boost:0xff9048};
+function buildWeaponIcon(type,parent){
+  const g=new THREE.Group();parent.add(g);
+  const metal=mat(0x344457,.52,.6),dark=mat(0x172431,.68,.36);
+  const c=PICKUP_COLORS[type]||0xffffff;
+  const light=mat(c,.32,.27,{emissive:c,emissiveIntensity:.46});
+  if(type==='rocket'){
+    for(const side of [-1,1]){
+      const tube=cylinder(.25,.25,1.6,metal,side*.38,0,0,g,9);tube.rotation.x=Math.PI/2;
+      const head=mesh(new THREE.ConeGeometry(.26,.54,9),light,side*.38,0,1.05,g);head.rotation.x=Math.PI/2;
+      box(.18,.17,.5,dark,side*.38,-.17,-.48,g);
+    }
+  }else if(type==='emp'){
+    const ring=mesh(new THREE.TorusGeometry(.72,.16,8,18),light,0,.3,0,g);ring.rotation.x=Math.PI/2;
+    sphere(.30,light,0,.3,0,g);cylinder(.25,.38,.55,metal,0,-.28,0,g,10);
+  }else if(type==='mine'){
+    cylinder(.78,.87,.28,dark,0,-.12,0,g,12);
+    cylinder(.5,.55,.10,metal,0,.05,0,g,10);
+    for(let i=0;i<4;i++){const a=i*Math.PI/2;sphere(.12,light,Math.cos(a)*.5,.15,Math.sin(a)*.5,g,8,6);}
+  }else if(type==='shield'){
+    const ring=mesh(new THREE.TorusGeometry(.69,.14,8,20),light,0,.1,0,g);ring.rotation.y=Math.PI/2;
+    sphere(.4,light,0,.1,0,g);box(.7,.19,.68,metal,0,-.52,0,g);
+  }else if(type==='repair'){
+    box(.35,1.4,.28,light,0,.2,0,g);box(1.25,.34,.28,light,0,.2,.03,g);
+    box(.95,.23,.74,metal,0,-.56,0,g);
+  }else if(type==='boost'){
+    for(const side of [-1,1]){
+      const bottle=cylinder(.33,.38,1.15,metal,side*.38,.05,0,g,12);bottle.rotation.x=Math.PI/2;
+      const jet=mesh(new THREE.ConeGeometry(.3,.67,10),light,side*.38,.05,-.87,g);jet.rotation.x=-Math.PI/2;
+    }
+  }
+  return g;
+}
 function makePickup(x,z,level){
+  const index=pickups.filter(p=>p.level===level).length;
+  const type=PICKUP_TYPES[index%PICKUP_TYPES.length];
   const group=new THREE.Group();group.position.set(x,2.6,z);battlefields[level].add(group);
-  const glow=mesh(new THREE.IcosahedronGeometry(1.62,0),mat(0xffba4b,.22,.35,{emissive:0xff6926,emissiveIntensity:.88}),0,0,0,group);
-  const ring=mesh(new THREE.TorusGeometry(2.22,.18,8,20),mat(0x72efff,.28,.4,{emissive:0x32ddfa,emissiveIntensity:.7}),0,0,0,group);
-  pickups.push({group,glow,ring,x,z,respawn:0,baseY:2.6,level});
+  const c=PICKUP_COLORS[type];
+  const glow=mesh(new THREE.IcosahedronGeometry(1.55,0),mat(c,.32,.1,{emissive:c,emissiveIntensity:.52,transparent:true,opacity:.23}),0,0,0,group);glow.castShadow=false;
+  const ring=mesh(new THREE.TorusGeometry(2.22,.16,8,20),mat(c,.26,.1,{emissive:c,emissiveIntensity:.65}),0,-.8,0,group);ring.castShadow=false;ring.rotation.x=Math.PI/2;
+  const icon=buildWeaponIcon(type,group);icon.scale.setScalar(1.13);icon.position.y=.25;
+  pickups.push({group,glow,ring,icon,type,x,z,respawn:0,baseY:2.6,level});
 }
 function spawnCrate(x,z,size=3,level='wasteland'){
   const group=new THREE.Group();group.position.set(x,1.4,z);battlefields[level].add(group);
@@ -557,9 +595,65 @@ function updateVehicleAssetFx(car,dt){
 // são transferidos para um pai invisível. Mantemos os objetos e referências
 // físicas (rodas/danos/turret) para não quebrar a simulação, mas eles jamais
 // são desenhados enquanto a carroceria GLB estiver ativa.
+// Armas acopladas são acessórios independentes e NÃO fazem parte da carroceria
+// procedural. Em especial, não reexibem a van antiga sob o GLB do palhaço.
+function weaponRoofY(c){
+  return [4.20,4.05,5.9,6.65,6.35,6.85,6.25,6.20,5.25,6.1,3.45][c.vehicleIndex]||4.5;
+}
+function headlightLocalPosition(c,side){
+  return {x:side*c.garage.width*(c.vehicleIndex===10?.18:.31),
+    y:[1.65,1.58,2.07,2.4,2.2,2.35,2.2,2.17,1.85,2.6,1.78][c.vehicleIndex]||1.8,
+    z:c.garage.length*.5+.48};
+}
+function worldFromVehicle(c,local){
+  const sn=Math.sin(c.yaw),cs=Math.cos(c.yaw);
+  return {x:c.x+local.x*cs+local.z*sn,z:c.z-local.x*sn+local.z*cs,
+    y:local.y+(c.suspension?.height||0)};
+}
+function headlightMuzzle(c,side){return worldFromVehicle(c,headlightLocalPosition(c,side));}
+function rocketMuzzle(c,side){
+  return worldFromVehicle(c,{x:side*Math.min(1.05,c.garage.width*.25),y:weaponRoofY(c)+.42,z:c.garage.length*.22+.85});
+}
+function createVehicleWeapons(c){
+  const equipmentRig=new THREE.Group();equipmentRig.name='EQUIPAMENTOS_DE_COMBATE';
+  c.body.add(equipmentRig);c.equipmentRig=equipmentRig;
+  // Dois pequenos canos embutidos nos faróis. Disparo real vem desses pontos.
+  const metal=mat(0x3d5267,.39,.62),glow=mat(0xffe3a0,.32,.15,{emissive:0xffb956,emissiveIntensity:.7});
+  for(const side of [-1,1]){
+    const p=headlightLocalPosition(c,side);
+    const gun=cylinder(.105,.15,.72,metal,p.x,p.y,p.z-.22,equipmentRig,10);gun.rotation.x=Math.PI/2;
+    sphere(.105,glow,p.x,p.y,p.z+.16,equipmentRig,8,6);
+  }
+  const rack=new THREE.Group();rack.name='SUPORTE_DE_FOGUETES';rack.position.set(0,weaponRoofY(c),c.garage.length*.16);equipmentRig.add(rack);
+  box(Math.min(2.5,c.garage.width*.70),.20,1.4,metal,0,0,0,rack);
+  for(const side of [-1,1]){
+    const x=side*Math.min(.85,c.garage.width*.20);
+    const tube=cylinder(.27,.27,1.6,metal,x,.35,0,rack,10);tube.rotation.x=Math.PI/2;
+    const nose=mesh(new THREE.ConeGeometry(.28,.58,10),glow,x,.35,.95,rack);nose.rotation.x=Math.PI/2;
+  }
+  c.rocketRack=rack;c.shownItem=null;c.itemVisual=null;
+  syncWeaponLoadout(c);
+}
+function syncWeaponLoadout(c){
+  if(!c.equipmentRig)return;
+  if(c.rocketRack)c.rocketRack.visible=c.alive&&c.ammo>0;
+  if(c.shownItem===c.item){if(c.itemVisual)c.itemVisual.visible=c.alive;return;}
+  if(c.itemVisual){
+    c.equipmentRig.remove(c.itemVisual);
+    disposeDynamic(c.itemVisual);
+    c.itemVisual=null;
+  }
+  c.shownItem=c.item;
+  if(c.item){
+    const carrier=new THREE.Group();carrier.name='ITEM_EQUIPADO_'+c.item;
+    carrier.position.set(0,weaponRoofY(c)+.33,-c.garage.length*.19);
+    const m=buildWeaponIcon(c.item,carrier);m.scale.setScalar(c.vehicleIndex===10?.62:.82);
+    c.equipmentRig.add(carrier);c.itemVisual=carrier;
+  }
+}
 function hideFrostProceduralRig(car,skin){
   if(car.vehicleIndex!==5||car.proceduralRig)return;
-  const proceduralParts=car.body.children.filter(child=>child!==skin);
+  const proceduralParts=car.body.children.filter(child=>child!==skin&&child!==car.equipmentRig);
   const hidden=new THREE.Group();
   hidden.name='DETACHED_FROST_PROCEDURAL_FALLBACK';
   // NÃO adicionamos o antigo rig de volta à árvore visível. Assim, mesmo que
@@ -826,7 +920,7 @@ function createKart(color,name,isPlayer=false,vehicleIndex=0){
     boostPadCooldown:0,smokeClock:0,aiOffset:rand(-2,2),aiTarget:null,aiThink:0,
     aiState:'hunt',aiFlankSide:(cars.length%2?1:-1),aiStuck:0,aiReverse:0,aiLastX:0,aiLastZ:0,aiHeading:0,aiGoal:null,aiPersonality:['hunter','flanker','brawler','scavenger'][cars.length%4],
     lastAttacker:null,damageFlash:0,crashCount:0,garage,vehicleIndex};
-  cars.push(car);attachVehicleAsset(car);return car;
+  cars.push(car);createVehicleWeapons(car);attachVehicleAsset(car);return car;
 }
 
 // Partes independentes. As texturas e os objetos são gerados localmente, sem assets pagos.
@@ -1453,22 +1547,24 @@ function takeDamage(car,amount,attacker){
 function collectItems(dt){
   for(const p of pickups){
     if(p.level!==mode)continue;
-    if(p.respawn>0){p.respawn-=dt;if(p.respawn<=0)p.group.visible=true;continue;}
-    for(const c of cars){if(!c.alive||Math.hypot(c.x-p.x,c.z-p.z)>c.radius+1.8)continue;
-      p.respawn=10;p.group.visible=false;
-      if(c.hp<40&&Math.random()<.55){c.hp=Math.min(100,c.hp+36);syncDamageVisuals(c);}
-      else if(c.item===null)c.item=choose(PICKUP_TYPES);
-      else if(c.ammo<12)c.ammo+=2;
-      else c.nitro=Math.min(100,c.nitro+30);
-      c.ammo=Math.min(15,c.ammo+1);c.score+=45;
-      if(c.isPlayer){showToast('📦 SUPRIMENTOS COLETADOS!',1.1);playSound('pickup');}
+    if(p.respawn>0){p.respawn-=dt;if(p.respawn<=0){p.respawn=0;p.group.visible=true;}continue;}
+    for(const c of cars){
+      if(!c.alive||Math.hypot(c.x-p.x,c.z-p.z)>c.radius+1.8)continue;
+      // Um item que já ocupa o suporte não é substituído sem intenção.
+      if(p.type!=='rocket'&&c.item!==null)continue;
+      if(p.type==='rocket'&&c.ammo>=15)continue;
+      if(p.type==='rocket')c.ammo=Math.min(15,c.ammo+4);
+      else c.item=p.type;
+      p.respawn=12;p.group.visible=false;c.score+=45;
+      syncWeaponLoadout(c);
+      if(c.isPlayer){showToast('📦 '+ITEMS[p.type][1]+' COLETADO — '+(p.type==='rocket'?'F PARA DISPARAR':'E PARA USAR'),1.5);playSound('pickup');}
       break;
     }
   }
 }
 function useItem(c){
   if(!c.item||!c.alive)return;
-  const t=c.item;c.item=null;
+  const t=c.item;c.item=null;syncWeaponLoadout(c);
   if(t==='shield'){c.shield=8;if(c.isPlayer)showToast('🛡️ ESCUDO ATIVADO!',1.4);playSound('shield');}
   if(t==='emp'){
     emitBurst(c.x,c.z,0x8df9ff,45,7);playSound('emp');
@@ -1485,34 +1581,38 @@ function useItem(c){
     mines.push({mesh:obj,x,z,owner:c,ttl:18,arm:.5});if(c.isPlayer)showToast('💣 MINA IMPLANTADA!',1.2);playSound('pickup');
   }
 }
+// Dois disparos paralelos saem EXATAMENTE dos dois faróis da frente (+Z)
+// para TODOS os veículos. Cada lado faz sua própria checagem de cobertura.
 function fireMachineGun(c){
   if(!c||!c.alive||c.gunCooldown>0||c.gunLocked)return false;
   c.gunCooldown=.125;c.gunHeat=Math.min(100,c.gunHeat+7.8);
   if(c.gunHeat>=98){c.gunLocked=true;if(c.isPlayer)showToast('⚠ ARMA SUPERAQUECIDA!',.9);}
-  const dx=Math.sin(c.yaw),dz=Math.cos(c.yaw),muzzleX=c.x+dx*(c.garage.length*.43+1),muzzleZ=c.z+dz*(c.garage.length*.43+1);
-  let nearest=null,distance=88;
-  for(const enemy of cars){if(enemy===c||!enemy.alive)continue;
-    const ox=enemy.x-muzzleX,oz=enemy.z-muzzleZ,along=ox*dx+oz*dz;
-    if(along<=0||along>85||along>=distance)continue;
-    const lateral=Math.abs(ox*dz-oz*dx);
-    if(lateral<enemy.radius+along*.018){nearest=enemy;distance=along;}
-  }
-  const cover=firstCoverOnLine(muzzleX,muzzleZ,muzzleX+dx*distance,muzzleZ+dz*distance,.1);
-  if(cover){
-    const clipped=Math.max(.4,distance*cover.t);
-    if(clipped<distance){distance=clipped;nearest=null;}
-  }
-  const endX=muzzleX+dx*distance,endZ=muzzleZ+dz*distance;
-  const geometry=new THREE.CylinderGeometry(.065,.095,distance,5);
-  const tracer=mesh(geometry,new THREE.MeshBasicMaterial({color:c.isPlayer?0xffe28a:0xff6d62,transparent:true,opacity:.85}),
-    (muzzleX+endX)*.5,2.95,(muzzleZ+endZ)*.5);
-  tracer.rotation.x=Math.PI/2;tracer.rotation.y=c.yaw;tracer.castShadow=false;
-  tracers.push({mesh:tracer,ttl:.075});
-  if(Math.random()<.7)emitSpark(muzzleX,muzzleZ,0xffdb83,1,1.4);
-  if(nearest){
-    const damage=6*c.garage.damage;takeDamage(nearest,damage,c);c.score+=Math.round(damage*5);
-    if(c.isPlayer&&Math.random()<.19)showCombo(`✹ ${nearest.name} ATINGIDO!`);
-    emitSpark(nearest.x,nearest.z,0xffa95e,2,1.7);
+  const dx=Math.sin(c.yaw),dz=Math.cos(c.yaw);
+  for(const side of [-1,1]){
+    const start=headlightMuzzle(c,side);
+    let nearest=null,distance=86;
+    for(const enemy of cars){
+      if(enemy===c||!enemy.alive)continue;
+      const ox=enemy.x-start.x,oz=enemy.z-start.z,along=ox*dx+oz*dz;
+      if(along<=0||along>85||along>=distance)continue;
+      const lateral=Math.abs(ox*dz-oz*dx);
+      if(lateral<enemy.radius+along*.018){nearest=enemy;distance=along;}
+    }
+    const cover=firstCoverOnLine(start.x,start.z,start.x+dx*distance,start.z+dz*distance,.1);
+    if(cover){const clipped=Math.max(.35,distance*cover.t);
+      if(clipped<distance){distance=clipped;nearest=null;}}
+    const endX=start.x+dx*distance,endZ=start.z+dz*distance;
+    const tracer=mesh(new THREE.CylinderGeometry(.063,.095,distance,5),
+      new THREE.MeshBasicMaterial({color:c.isPlayer?0xffe28a:0xff6d62,transparent:true,opacity:.9,depthWrite:false}),
+      (start.x+endX)*.5,start.y,(start.z+endZ)*.5);
+    tracer.rotation.order='YXZ';tracer.rotation.y=c.yaw;tracer.rotation.x=Math.PI/2;
+    tracer.castShadow=false;tracers.push({mesh:tracer,ttl:.082,side,origin:start});
+    createParticle(start.x,start.y,start.z,0xfff3aa,.22,dx*2,0,dz*2,.08);
+    if(nearest){
+      const damage=3*c.garage.damage;takeDamage(nearest,damage,c);c.score+=Math.round(damage*5);
+      if(c.isPlayer&&Math.random()<.14)showCombo('✹ '+nearest.name+' ATINGIDO!');
+      emitSpark(nearest.x,nearest.z,0xffa95e,1,1.7);
+    }
   }
   if(c.isPlayer)playSound('gun');
   return true;
@@ -1590,8 +1690,11 @@ function fireRocket(c,force=false,spread=0){
   const shell=cylinder(.55,.5,2.0,mat(0xf3f1e8,.45),0,0,0,g);shell.rotation.x=Math.PI/2;
   const tip=mesh(new THREE.ConeGeometry(.56,.85,10),mat(0xff5a58,.38,.2,{emissive:0xa7262b,emissiveIntensity:.5}),0,0,1.35,g);tip.rotation.x=Math.PI/2;
   sphere(.48,mat(0xffbf35,.24,.1,{emissive:0xff8a1e,emissiveIntensity:1.6}),0,0,-1.2,g);
-  const angle=c.yaw+spread;g.position.set(c.x+Math.sin(angle)*(c.garage.length*.42+1),2.8,c.z+Math.cos(angle)*(c.garage.length*.42+1));g.rotation.y=angle;
-  missiles.push({mesh:g,x:g.position.x,z:g.position.z,yaw:angle,speed:113,owner:c,ttl:1.9});
+  c.rocketSide=(c.rocketSide||0)+1;
+  const source=rocketMuzzle(c,c.rocketSide%2?1:-1),angle=c.yaw+spread;
+  g.position.set(source.x,source.y,source.z);g.rotation.y=angle;
+  missiles.push({mesh:g,x:source.x,z:source.z,y:source.y,yaw:angle,speed:113,owner:c,ttl:1.9});
+  syncWeaponLoadout(c);
   playSound('rocket');
 }
 function updateMissiles(dt){
@@ -1607,7 +1710,7 @@ function updateMissiles(dt){
       for(const c of cars)if(c!==m.owner&&c.alive&&Math.hypot(c.x-x,c.z-z)<8.5)takeDamage(c,12,m.owner);
       emitExplosion(x,z,0xffae55,18,3.6);disposeDynamic(m.mesh);missiles.splice(i,1);continue;
     }
-    m.mesh.position.set(m.x,2.8+Math.sin(elapsed*24)*.14,m.z);
+    m.mesh.position.set(m.x,(m.y??2.8)+Math.sin(elapsed*24)*.14,m.z);
     if(Math.random()<.7)emitSpark(m.x-Math.sin(m.yaw)*1.5,m.z-Math.cos(m.yaw)*1.5,0xffac36,.8,2.2);
     let hit=null;
     for(const c of cars)if(c!==m.owner&&c.alive&&Math.hypot(c.x-m.x,c.z-m.z)<c.radius+1.0){hit=c;break;}
@@ -1703,7 +1806,7 @@ function updateParticles(dt){
 }
 function updateWorldVisual(dt){
   visualClock+=dt;
-  for(const p of pickups){if(!p.group.visible)continue;p.group.rotation.y+=dt*1.4;p.group.position.y=p.baseY+Math.sin(visualClock*3+p.x)*.52;p.ring.rotation.x+=dt*1.4;}
+  for(const p of pickups){if(!p.group.visible)continue;p.icon.rotation.y+=dt*.85;p.group.position.y=p.baseY+Math.sin(visualClock*3+p.x)*.52;p.ring.rotation.z+=dt*.8;}
   for(const c of cars){if(c.shield>0&&c.alive){
     if(!c.shieldMesh){
       const material=new THREE.MeshBasicMaterial({color:0x53eaff,transparent:true,opacity:.15,wireframe:true,depthWrite:false});
@@ -1716,6 +1819,7 @@ function updateWorldVisual(dt){
     if(!c.alive && c.burnTime>0){c.burnTime-=dt;c.smokeClock-=dt;if(c.smokeClock<=0){emitSmoke(c.x,c.z,0x252a2f);c.smokeClock=.14;}
       if(c.burnTime<=0)c.damageRig.fireGroup.visible=false;}
     if(c.assetFx&&c.alive)updateVehicleAssetFx(c,dt);
+    syncWeaponLoadout(c);
   }
   if(gameState==='playing')for(const c of cars){
     if(!c.alive)continue;

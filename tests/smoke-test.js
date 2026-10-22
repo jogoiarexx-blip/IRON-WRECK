@@ -105,10 +105,10 @@ console.log('PASS: 3 veículos clássicos e especiais com recarga.');
 run("garageChoice=0;resetGame('wasteland');player.x=0;player.z=0;player.yaw=0;player.gunCooldown=0;player.gunHeat=0;cars[1].x=0;cars[1].z=24;cars[1].hp=100");
 assert(run('fireMachineGun(player)'), 'metralhadora deve disparar');
 assert(run('cars[1].hp')<100, 'tiro deve atingir um alvo alinhado');
-assert.equal(run('tracers.length'),1);
+assert.equal(run('tracers.length'),2, 'dois traçantes saem dos faróis');
 run('updateMissiles(.2)');
 assert.equal(run('tracers.length'),0);
-console.log('PASS: dano da metralhadora e descarte de traçadores.');
+console.log('PASS: metralhadora dupla, dano equilibrado e descarte de traçadores.');
 
 run("garageChoice=0;resetGame('city')");
 run("for(const enemy of cars.slice(1)){enemy.hp=1;enemy.invuln=0;takeDamage(enemy,9,player)}");

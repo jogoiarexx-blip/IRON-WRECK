@@ -46,3 +46,19 @@ v7.7 (22/10/2026):
 - garagem: miniatura do GLB correto, indicador de status e botão de tentativa
 - testes de sintaxe, smoke, IA, física, GLB e contrato visual: PASS
 - Chromium localhost: ERR_BLOCKED_BY_ADMINISTRATOR (limitação ambiental)
+
+
+v7.8 — GLB exclusivo sem sobreposição
+- Novo agrupamento invisível das peças procedurais da Frost Van ao carregar GLB
+- Efeitos do Clown Cream usam apenas partículas, sem ornamentos geometria persistente
+- Testes de regressão: consultar execução de testes no pacote
+
+- Substituição reforçada: antigo rig removido da árvore de renderização e descartado na limpeza
+
+v7.9 (2026-10-22) — ARMAS MONTADAS E FARÓIS DUPLOS
+- Pickups de seis tipos identificados visualmente, distribuídos nos 3 mapas.
+- Modelo de arma coletada aparece no veículo (inclusive no GLB do palhaço) até ser usado com E.
+- Foguetes coletados aumentam munição em 4; rack visível quando ammo > 0; foguetes disparam do rack.
+- Metralhadora J produz 2 disparos dianteiros independentes e 2 traçantes, dano total similar ao anterior.
+- Testes: smoke, ai, visual, física, armas, GLB, palhaço exclusivo e validação de 10 assets: PASS.
+- Navegador local Chromium: ERR_BLOCKED_BY_ADMINISTRATOR; WebGL real NÃO validado.

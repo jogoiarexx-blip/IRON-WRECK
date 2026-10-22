@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <meta name="theme-color" content="#141719" />
 <meta name="description" content="Iron Wreck: combate veicular 3D no Three.js: onze veículos, dez modelos GLB e deformação localizada, dano progressivo, latarias destacáveis e três arenas de combate." />
-<title>IRON WRECK v7.8 — CLOWN CREAM CORRIGIDO</title>
+<title>IRON WRECK v7.9 — ARMAS VISÍVEIS</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -37,13 +37,13 @@
       <div class="meter"><div id="heatFill" class="meter-fill heat"></div></div>
     </div>
     <div class="speedometer"><span id="speed">0</span><small>KM/H</small></div>
-    <div class="item-slot"><small>PODER <kbd>E</kbd></small><div id="itemIcon">?</div><span id="itemName">VAZIO</span></div>
+    <div class="item-slot"><small>ARMA COLETADA <kbd>E</kbd></small><div id="itemIcon">?</div><span id="itemName">VAZIO</span></div>
     <div class="rocket-box"><small>FOGUETES <kbd>F</kbd></small><strong id="ammo">× 8</strong><span class="gun-hint">METRALHADORA <kbd>J</kbd></span></div>
   </div>
   <div class="map-wrap"><div class="map-label">RADAR DE COMBATE</div></div>
   <div id="toast" class="toast"></div>
   <div id="combo" class="combo"></div>
-  <div class="combat-hint">J / CLIQUE · METRALHADORA &nbsp;|&nbsp; F · FOGUETE &nbsp;|&nbsp; Q · ESPECIAL &nbsp;|&nbsp; E · POWER-UP</div>
+  <div class="combat-hint">J / CLIQUE · 2 FARÓIS / METRALHADORA &nbsp;|&nbsp; F · FOGUETE &nbsp;|&nbsp; Q · ESPECIAL &nbsp;|&nbsp; E · POWER-UP</div>
 </div>
 <canvas id="minimap" width="220" height="170" aria-label="Radar de combate"></canvas>
 <section id="menu" class="screen">
@@ -66,9 +66,9 @@
   <div class="settings-row"><label class="control-switch"><input type="checkbox" id="invertToggle" /><span>Inverter direção esquerda/direita (opcional)</span></label>
   <label class="quality-label" for="qualitySelect">QUALIDADE GRÁFICA <select id="qualitySelect"><option value="low">LEVE</option><option value="medium" selected>EQUILIBRADA</option><option value="high">ALTA</option></select></label><label class="quality-label" for="difficultySelect">DIFICULDADE DA IA <select id="difficultySelect"><option value="easy">INICIANTE</option><option value="normal" selected>NORMAL</option><option value="hard">IMPLACÁVEL</option></select></label></div>
   <button class="play-btn" id="startBtn">ENTRAR NA ZONA DE GUERRA <span>➜</span></button>
-  <div class="help-line"><span><kbd>WASD</kbd> DIRIGIR</span><span><kbd>ESPAÇO</kbd> FREIO DE MÃO</span><span><kbd>SHIFT</kbd> NITRO</span><span><kbd>J</kbd> TIRO</span><span><kbd>F</kbd> FOGUETE</span><span><kbd>Q</kbd> ESPECIAL</span><span><kbd>C</kbd> RETROVISOR</span><span><kbd>H</kbd> HUD</span><span><kbd>K</kbd> FOTO PNG</span><span><kbd>I</kbd> PLANO DOS RIVAIS</span></div>
+  <div class="help-line"><span><kbd>WASD</kbd> DIRIGIR</span><span><kbd>ESPAÇO</kbd> FREIO DE MÃO</span><span><kbd>SHIFT</kbd> NITRO</span><span><kbd>J</kbd> METRALHADORA DUPLA</span><span><kbd>E</kbd> USAR ARMA DO CHÃO</span><span><kbd>F</kbd> FOGUETE</span><span><kbd>Q</kbd> ESPECIAL</span><span><kbd>C</kbd> RETROVISOR</span><span><kbd>H</kbd> HUD</span><span><kbd>K</kbd> FOTO PNG</span><span><kbd>I</kbd> PLANO DOS RIVAIS</span></div>
   <div class="gallery-prompt"><a href="galeria.html" target="_blank" rel="noopener">🖼 VER PRÉVIAS DOS 11 VEÍCULOS E DOS 3 CENÁRIOS</a></div>
-  <div class="credits">THREE.JS · ARTE 3D PROCEDURAL · PROTÓTIPO ORIGINAL · v7.8 · GLB CORRIGIDO</div>
+  <div class="credits">THREE.JS · ARTE 3D PROCEDURAL · PROTÓTIPO ORIGINAL · v7.9 · ARMAS MONTADAS</div>
 </div>
 </section>
 <section id="endScreen" class="screen hidden"><div class="screen-shade"></div><div class="end-content">
@@ -85,6 +85,6 @@
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}
 </script>
-<script src="game.js?v=7.8"></script>
+<script src="game.js?v=7.9"></script>
 </body>
 </html>

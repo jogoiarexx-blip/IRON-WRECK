@@ -186,3 +186,13 @@ Os novos efeitos animados (luzes, ornamentos, confetes e projéteis especiais) s
 ## v7.8 — Somente GLB, sem mistura de modelos
 
 O Clown Cream Carnage agora oculta toda a geometria procedural da Frost Van quando o GLB carrega: carroceria, rodas, torres de armas e peças de dano. Os antigos componentes são agrupados em um nó invisível **fora da árvore de renderização**, mantendo apenas suas referências para cálculos internos. Se o GLB falhar, a carroceria procedural continua disponível porque a retirada só ocorre após o carregamento bem-sucedido. Ao encerrar a partida, os recursos da carroceria antiga são descartados. Não há mais cone, enfeites ou ornamentos 3D extras sobre o GLB; permanecem apenas partículas temporárias (fumaça/confete) e o ataque Carnaval de Casquinhas. Os outros 10 veículos não foram alterados visualmente.
+
+
+## v7.9 — Armas do chão equipadas e metralhadora dupla
+
+- Cada pickup agora é identificável pelo formato/cor e tem tipo fixo (foguetes, EMP, mina, escudo, reparo ou nitro). Nada é sorteado depois que o veículo toca na caixa.
+- Itens coletados são instalados como acessórios no teto/carenagem, ficam visíveis até o uso com **E** e somem após utilização. Quando já equipado, outro item não é consumido inadvertidamente.
+- O foguete é reabastecido nas caixas laranja de foguetes e o suporte frontal de foguetes fica visível enquanto houver munição (**F**).
+- **J** atira simultaneamente dos **dois faróis dianteiros**, calculando colisões/cobertura para cada cano, com metade do dano anterior por cano. Não dobra o DPS.
+- O rig de equipamento é isolado da carroceria procedural: o **Clown Cream Carnage** continua exibindo apenas seu GLB e os acessórios das armas equipadas, nunca o modelo antigo da Frost Van.
+- Sem novos assets externos; Three.js e GLBs originais preservados.
