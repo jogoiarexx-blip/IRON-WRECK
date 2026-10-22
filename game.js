@@ -42,7 +42,7 @@ const GARAGE = [
  {name:'TITAN',className:'CAMINHÃO DE GUERRA',icon:'🚛',speed:.82,armor:1.38,damage:.95,mass:1.75,turn:.78,accel:.78,width:4.9,length:8.7,wheel:1.34,color:0xcf664b,special:'PULSO DE FERRO',specialType:'pulse'},
  {name:'OMEGA BUS',className:'ÔNIBUS BLINDADO',icon:'🚌',speed:.68,armor:1.62,damage:1.04,mass:2.4,turn:.62,accel:.60,width:5.05,length:15.0,wheel:1.40,color:0xe6a93b,special:'BUZINA SÍSMICA',specialType:'horn'},
  {name:'GRINDER',className:'CAMINHÃO DE LIXO',icon:'🚛',speed:.73,armor:1.78,damage:1.1,mass:2.6,turn:.65,accel:.65,width:5.1,length:11.6,wheel:1.43,color:0x568b54,special:'COMPACTADOR',specialType:'crusher'},
- {name:'FROST VAN',className:'CLOWN CREAM CARNAGE',icon:'🍦',speed:1.06,armor:.83,damage:1,mass:1,turn:1.08,accel:1.10,width:4.35,length:8.6,wheel:1.19,color:0xf5a3c0,special:'CARNAVAL DE CASQUINHAS',specialType:'frost'},
+ {name:'CLOWN CREAM CARNAGE',className:'VAN DE SORVETE ASSOMBRADA',icon:'🍦',speed:1.06,armor:.83,damage:1,mass:1,turn:1.08,accel:1.10,width:4.35,length:8.6,wheel:1.19,color:0xf5a3c0,special:'CARNAVAL DE CASQUINHAS',specialType:'frost'},
  {name:'HOOKJAW',className:'GUINCHO BRUTAL',icon:'🪝',speed:.88,armor:1.24,damage:1.04,mass:1.64,turn:.90,accel:.86,width:4.8,length:10.4,wheel:1.30,color:0xd67c39,special:'GANCHO MAGNÉTICO',specialType:'hook'},
  {name:'INFERNO',className:'CAMINHÃO DE BOMBEIROS',icon:'🚒',speed:.78,armor:1.48,damage:1.05,mass:2.12,turn:.72,accel:.73,width:5.0,length:12.5,wheel:1.36,color:0xda3834,special:'JATO DE PRESSÃO',specialType:'water'},
  {name:'SENTINEL',className:'SUV DE PATRULHA',icon:'🚓',speed:1.14,armor:1.07,damage:1.0,mass:1.18,turn:1.09,accel:1.07,width:4.4,length:8.15,wheel:1.2,color:0x5177b7,special:'SIRENE EMP',specialType:'siren'},
