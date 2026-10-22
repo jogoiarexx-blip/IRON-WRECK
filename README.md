@@ -1,3 +1,19 @@
+## Estado de validação v7.7
+- GLB original otimizado presente em `assets/frost-van.glb` (1.472.380 bytes), com textura embutida e geometria verificadas.
+- Miniatura gerada a partir do GLB real do jogo.
+- Testes de simulação (`smoke-test.js`, `ai-v7.test.js`, `physics-v6.test.js`, `glb-fleet-v7.3.test.js`) passaram.
+- Teste de navegação WebGL: o Chromium do ambiente bloqueou a abertura de `127.0.0.1` com `ERR_BLOCKED_BY_ADMINISTRATOR`; portanto, o jogo 3D não foi confirmado visualmente no navegador.
+- Na garagem, selecione FROST VAN: `✅ CLOWN CREAM CARNAGE — GLB carregado!` deve aparecer; caso contrário a interface exibe uma falha específica e botão de recarga.
+
+# IRON WRECK v7.7 — GLB do carro de sorvete corrigido
+
+Esta revisão corrige o card da garagem para exibir o **modelo real Clown Cream Carnage**, adiciona status de carregamento do GLB, botão para nova tentativa, prioridade para o veículo selecionado e fallback visível. Arquivo `assets/frost-van.glb` preservado; reconhecido no repositório com 1.472.380 bytes.
+
+**Diagnóstico:** a v7.6 ainda exibia `previews/modelo-frost-van-v7.3.png`, portanto a seleção mostrava a van antiga independentemente do GLB disponível. Além disso, erros do GLTFLoader não eram mostrados ao usuário e o modelo denso consumia recursos em deformações.
+
+**Teste:** todos os GLBs podem ser verificados na pasta `assets`, o jogo carrega os GLBs via HTTP(S); em `file://` é esperado fallback. Testes headless rodam `node tests/smoke-test.js` etc. WebGL interativo requer execução em navegador compatível.
+
+---
 # IRON WRECK v7.6 — Site publicado
 
 # IRON WRECK v7.4 — GARAGEM COMPLETA

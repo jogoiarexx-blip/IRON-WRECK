@@ -1,0 +1,25 @@
+// Contract test: GLB placement and fallback, with diagnostic state and 11-car garage.
+const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert');
+const root=path.resolve(__dirname,'..');
+const source=fs.readFileSync(path.join(root,'game.js'),'utf8');
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+assert(html.includes('id="garageAssetStatus"'), 'status should be visible in garage');
+assert(html.includes('id="retryAssetsBtn"'), 'retry should be visible');
+assert(fs.existsSync(path.join(root,'previews/clown-cream-carnage-v7.7-thumb.jpg')),'actual model thumbnail');
+const asset=fs.readFileSync(path.join(root,'assets/frost-van.glb'));
+assert.equal(asset.subarray(0,4).toString('ascii'),'glTF','GLB magic');
+assert.equal(asset.readUInt32LE(4),2,'GLB version');
+assert.equal(asset.readUInt32LE(8),asset.length,'valid GLB byte count');
+let jlen=asset.readUInt32LE(12),type=asset.subarray(16,20).toString();
+assert.equal(type,'JSON');
+const gltf=JSON.parse(asset.subarray(20,20+jlen).toString());
+assert(gltf.meshes.length>0&&gltf.materials?.length>0,'optimized model has meshes/materials');
+assert(gltf.images?.length>0,'texture embedded');
+assert(/function updateGarageAssetBadge/.test(source),'visible load diagnostics');
+assert(/new URL\(VEHICLE_GLB\[index\],document\.baseURI\)/.test(source),'explicit asset URL');
+assert(/car\.vehicleIndex===5/.test(source),'car specific FX');
+assert(/previews\/clown-cream-carnage-v7\.7-thumb\.jpg/.test(source),'new thumbnail used');
+assert(/function spawnCandyRocket/.test(source),'special attack exists');
+assert(/kind==='frost'/.test(source),'special routed');
+console.log(`PASS: GLB has valid glTF header, ${gltf.meshes.length} meshes, ${gltf.materials.length} materials, embedded texture`);
+console.log('PASS: visible load states, model-specific thumbnail, GLB URL, retry, candy special and fallback');

@@ -3,13 +3,27 @@ let THREE;
 // física, suspensão, colisões e armas permanece na implementação existente.
 const VEHICLE_GLB={
   0:'assets/marauder.glb',1:'assets/phantom.glb',2:'assets/titan.glb',
-  3:'assets/omega-bus.glb',4:'assets/grinder.glb',5:'assets/frost-van.glb',
+  3:'assets/omega-bus.glb',4:'assets/grinder.glb',5:'assets/frost-van.glb?v=7.7',
   6:'assets/hookjaw.glb',7:'assets/inferno.glb',8:'assets/sentinel.glb',9:'assets/goliath.glb'
 }; // índice 10 (moto) usa carroceria procedural por enquanto.
 
 const loadedVehicleTemplates=new Map(), assetPending=new Map();
 const assetSharedGeometries=new Set(), assetSharedMaterials=new Set(), assetSharedTextures=new Set();
 let gltfAssetLoader=null;
+const vehicleAssetState=new Map();
+let loaderError='';
+function updateGarageAssetBadge(index=garageChoice){
+  const notice=typeof document!=='undefined'?document.getElementById('garageAssetStatus'):null;
+  if(!notice)return;
+  if(index===10){notice.textContent='🏍️ REAPER BIKE — modelo procedural';notice.dataset.state='ready';return;}
+  const status=vehicleAssetState.get(index),isClown=index===5;
+  const label=isClown?'CLOWN CREAM CARNAGE':'MODELO 3D';
+  notice.dataset.state=status?.status||'loading';
+  if(status?.status==='ready')notice.textContent=`✅ ${label} — GLB carregado!`;
+  else if(status?.status==='error')notice.textContent=`⚠️ ${label} indisponível: ${status.message||loaderError||'falha de carregamento'}. Usando modelo alternativo.`;
+  else notice.textContent=`⏳ Carregando ${label} em GLB…`;
+}
+
 
 
 // IRON WRECK v7.0 — combate tático com IA, navegação local, cobertura e recuperação de travamentos.
@@ -431,20 +445,41 @@ function addVehicleDetails(body,garage,index,paint,metal,dark){
 // Caso a rede/loader falhe, o jogo continua usando as carrocerias procedurais.
 async function startVehicleAssets(){
   if(typeof location!=='undefined'&&location.protocol==='file:'){
-    console.info('Carrocerias GLB exigem HTTP: fallback procedural em file://');return;
+    const error='GLB requer HTTP/HTTPS; use o iniciador ou GitHub Pages';
+    for(const key of Object.keys(VEHICLE_GLB))vehicleAssetState.set(Number(key),{status:'error',message:error});
+    updateGarageAssetBadge();console.warn(error);return;
   }
-  try{
-    const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
-    gltfAssetLoader=new GLTFLoader();
-    await Promise.allSettled(Object.keys(VEHICLE_GLB).map(index=>loadVehicleTemplate(Number(index))));
-  }catch(error){console.warn('GLTFLoader indisponível, mantendo carrocerias procedurais',error);}
+  gltfAssetLoader=null;
+  const sources=['three/addons/loaders/GLTFLoader.js',
+    'https://unpkg.com/three@0.160.1/examples/jsm/loaders/GLTFLoader.js'];
+  for(const url of sources){
+    try{
+      const {GLTFLoader}=await import(url);
+      gltfAssetLoader=new GLTFLoader();loaderError='';break;
+    }catch(error){loaderError=String(error.message||error).slice(0,120);console.warn('GLTFLoader não abriu:',url,error);}
+  }
+  if(!gltfAssetLoader){
+    for(const key of Object.keys(VEHICLE_GLB))vehicleAssetState.set(Number(key),{status:'error',message:loaderError});
+    updateGarageAssetBadge();return;
+  }
+  // O veículo selecionado tem prioridade. O restante da garagem não deve
+  // impedir que o carro de sorvete apareça quando o jogador apertar Jogar.
+  const order=[garageChoice,5,...Object.keys(VEHICLE_GLB).map(Number)];
+  for(const index of [...new Set(order)]){
+    if(!VEHICLE_GLB[index])continue;
+    await loadVehicleTemplate(index);
+  }
+  updateGarageAssetBadge();
 }
 function loadVehicleTemplate(index){
   if(loadedVehicleTemplates.has(index))return Promise.resolve(loadedVehicleTemplates.get(index));
   if(assetPending.has(index))return assetPending.get(index);
   if(!gltfAssetLoader||!VEHICLE_GLB[index])return Promise.resolve(null);
-  const job=gltfAssetLoader.loadAsync(VEHICLE_GLB[index]).then(gltf=>{
+  vehicleAssetState.set(index,{status:'loading'});updateGarageAssetBadge();
+  const path=new URL(VEHICLE_GLB[index],document.baseURI).href;
+  const job=gltfAssetLoader.loadAsync(path).then(gltf=>{
     const template=gltf.scene;
+    if(!template)throw new Error('GLB sem cena 3D');
     template.traverse(node=>{
       if(node.isMesh){assetSharedGeometries.add(node.geometry);
         if(Array.isArray(node.material))for(const m of node.material)assetSharedMaterials.add(m);
@@ -456,8 +491,12 @@ function loadVehicleTemplate(index){
     });
     loadedVehicleTemplates.set(index,template);
     for(const car of cars)if(car.vehicleIndex===index)attachVehicleAsset(car);
-    return template;
-  }).catch(error=>{console.warn('GLB não carregado:',VEHICLE_GLB[index],error);return null;
+    vehicleAssetState.set(index,{status:'ready'});updateGarageAssetBadge();
+    console.info(`GLB ${index} carregado:`,path);return template;
+  }).catch(error=>{
+    const message=String(error?.message||error).slice(0,140);
+    vehicleAssetState.set(index,{status:'error',message});updateGarageAssetBadge();
+    console.error('GLB não carregado:',path,error);return null;
   }).finally(()=>assetPending.delete(index));
   assetPending.set(index,job);return job;
 }
@@ -504,7 +543,7 @@ function buildClownCreamFx(car){
   const bulbs=[],halo=new THREE.Group();root.add(halo);
   for(let i=0;i<8;i++){
     const a=i*Math.PI*2/8,bulb=mesh(new THREE.SphereGeometry(.18,10,8),glowMats[i%glowMats.length],Math.cos(a)*1.18,.18,Math.sin(a)*1.18,halo);
-    bulb.userData.phase=i*.7;bulbs.push(bulb);
+    bulb.userData=bulb.userData||{};bulb.userData.phase=i*.7;bulbs.push(bulb);
   }
   const cone=mesh(new THREE.ConeGeometry(.56,1.35,12),topperMat,0,1.02,0,root);cone.rotation.x=Math.PI;
   const scoop=mesh(new THREE.SphereGeometry(.48,14,12),candyMat,0,1.82,0,root);
@@ -575,14 +614,19 @@ function attachVehicleAsset(car){
     // A geometria original dos GLBs é compartilhada. Cada veículo em combate
     // precisa de sua própria cópia para permitir deformação sem afetar rivais.
     if(node.geometry?.attributes?.position && node.geometry.clone){
-      node.geometry=node.geometry.clone();
-      const pos=node.geometry.attributes.position;
-      morphMeshes.push({geometry:node.geometry,base:new Float32Array(pos.array)});
+      // O Clown Cream tem ~40 mil vértices: evita recriar normais em cada
+      // batida e mantém os danos por peças e escurecimento, sem travar jogo.
+      const count=node.geometry.attributes.position.count;
+      if(!(car.vehicleIndex===5&&count>12000)){
+        node.geometry=node.geometry.clone();
+        const pos=node.geometry.attributes.position;
+        morphMeshes.push({geometry:node.geometry,base:new Float32Array(pos.array)});
+      }
     }
     node.material=Array.isArray(node.material)?node.material.map(m=>m.clone()):node.material.clone();
     const mm=Array.isArray(node.material)?node.material:[node.material];
     for(const m of mm){if(m.color){m.userData.basePaint=m.color.clone();materials.push(m);}}
-    node.castShadow=true;node.receiveShadow=true;
+    node.castShadow=car.vehicleIndex!==5;node.receiveShadow=true;
   }});
   if(car.vehicleIndex===5){
     skin.rotation.y=Math.PI/2;
@@ -1870,18 +1914,28 @@ function populateGarage(){
     const stars=n=>'★'.repeat(n)+'☆'.repeat(5-n);
     return `<button class="garage-card ${i===garageChoice?'active':''}" data-vehicle="${i}" aria-pressed="${i===garageChoice}">
       <span class="car-stripe" style="background:#${v.color.toString(16).padStart(6,'0')}"></span>
-      <img class="garage-thumb" src="previews/modelo-${thumbs[i]}-${thumbs[i]==='reaper-bike'?'v7.4':'v7.3'}.png" alt="Modelo 3D de ${v.name}" loading="lazy"><b>${v.name}</b><small>${v.className}</small>
+      <img class="garage-thumb" src="${i===5?'previews/clown-cream-carnage-v7.7-thumb.jpg':`previews/modelo-${thumbs[i]}-${thumbs[i]==='reaper-bike'?'v7.4':'v7.3'}.png`}" alt="Modelo 3D de ${v.name}" loading="lazy"><b>${v.name}</b><small>${v.className}</small>
       <span class="special-name">☄ ${v.special}</span>
       <em>BLINDAGEM ${stars(armor)}<br>VELOCIDADE ${stars(speed)}<br>IMPACTO ${stars(force)}</em>
     </button>`;
   }).join('');
 }
 function registerControls(){
-  populateGarage();
+  populateGarage();updateGarageAssetBadge();
   document.querySelectorAll('.garage-card').forEach(btn=>btn.addEventListener('click',()=>{
     garageChoice=Number(btn.dataset.vehicle)||0;document.querySelectorAll('.garage-card').forEach(b=>b.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.garage-card').forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));
+    updateGarageAssetBadge();
+    if(gltfAssetLoader&&VEHICLE_GLB[garageChoice])void loadVehicleTemplate(garageChoice);
   }));
   $('invertToggle').addEventListener('change',ev=>{invertSteering=!!ev.target.checked;});
+  $('retryAssetsBtn')?.addEventListener('click',()=>{
+    loaderError='';vehicleAssetState.clear();updateGarageAssetBadge();
+    if(gltfAssetLoader){
+      const current=garageChoice;
+      // Forçar nova tentativa somente para os modelos que ainda falharam.
+      if(!loadedVehicleTemplates.has(current))void loadVehicleTemplate(current);
+    }else void startVehicleAssets();
+  });
   $('qualitySelect').addEventListener('change',ev=>chooseGraphicsQuality(ev.target.value));
   $('difficultySelect').addEventListener('change',ev=>{aiDifficulty=['easy','normal','hard'].includes(ev.target.value)?ev.target.value:'normal';});
   window.addEventListener('pointerdown',ev=>{if(ev.button===0&&ev.target===renderer?.domElement)held.add('Mouse0');});

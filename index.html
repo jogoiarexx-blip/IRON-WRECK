@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <meta name="theme-color" content="#141719" />
 <meta name="description" content="Iron Wreck: combate veicular 3D no Three.js: onze veículos, dez modelos GLB e deformação localizada, dano progressivo, latarias destacáveis e três arenas de combate." />
-<title>IRON WRECK v7.6 — CLOWN CREAM CARNAGE</title>
+<title>IRON WRECK v7.7 — CLOWN CREAM CORRIGIDO</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -59,14 +59,16 @@
     <button class="mode-card" id="derbyMode" data-mode="city"><span class="mode-symbol">🏙</span><span><b>CIDADE FANTASMA</b><small>Ruas destruídas · ônibus · barricadas</small></span><span class="mode-arrow">↗</span></button>
     <button class="mode-card" id="harborMode" data-mode="harbor"><span class="mode-symbol">⚓</span><span><b>PORTO DAS SOMBRAS</b><small>Contêineres · guindastes · cais</small></span><span class="mode-arrow">↗</span></button>
   </div>
-  <div class="section-label">02 <span>ESCOLHA SUA MÁQUINA DE GUERRA · 10 VEÍCULOS DIFERENTES</span></div>
+  <div class="section-label">02 <span>ESCOLHA SUA MÁQUINA DE GUERRA · 11 VEÍCULOS DIFERENTES</span></div>
   <div class="garage-grid" id="garageGrid" aria-label="Garagem com onze veículos"></div>
+  <div class="glb-status" role="status" aria-live="polite" id="garageAssetStatus">⏳ Carregando modelos GLB…</div>
+  <button class="glb-retry" type="button" id="retryAssetsBtn">↻ Recarregar modelo 3D</button>
   <div class="settings-row"><label class="control-switch"><input type="checkbox" id="invertToggle" /><span>Inverter direção esquerda/direita (opcional)</span></label>
   <label class="quality-label" for="qualitySelect">QUALIDADE GRÁFICA <select id="qualitySelect"><option value="low">LEVE</option><option value="medium" selected>EQUILIBRADA</option><option value="high">ALTA</option></select></label><label class="quality-label" for="difficultySelect">DIFICULDADE DA IA <select id="difficultySelect"><option value="easy">INICIANTE</option><option value="normal" selected>NORMAL</option><option value="hard">IMPLACÁVEL</option></select></label></div>
   <button class="play-btn" id="startBtn">ENTRAR NA ZONA DE GUERRA <span>➜</span></button>
   <div class="help-line"><span><kbd>WASD</kbd> DIRIGIR</span><span><kbd>ESPAÇO</kbd> FREIO DE MÃO</span><span><kbd>SHIFT</kbd> NITRO</span><span><kbd>J</kbd> TIRO</span><span><kbd>F</kbd> FOGUETE</span><span><kbd>Q</kbd> ESPECIAL</span><span><kbd>C</kbd> RETROVISOR</span><span><kbd>H</kbd> HUD</span><span><kbd>K</kbd> FOTO PNG</span><span><kbd>I</kbd> PLANO DOS RIVAIS</span></div>
-  <div class="gallery-prompt"><a href="galeria.html" target="_blank" rel="noopener">🖼 VER PRÉVIAS DOS 10 CARROS E DOS 3 CENÁRIOS</a></div>
-  <div class="credits">THREE.JS · ARTE 3D PROCEDURAL · PROTÓTIPO ORIGINAL · v7.4 · GARAGEM COMPLETA</div>
+  <div class="gallery-prompt"><a href="galeria.html" target="_blank" rel="noopener">🖼 VER PRÉVIAS DOS 11 VEÍCULOS E DOS 3 CENÁRIOS</a></div>
+  <div class="credits">THREE.JS · ARTE 3D PROCEDURAL · PROTÓTIPO ORIGINAL · v7.7 · GLB CORRIGIDO</div>
 </div>
 </section>
 <section id="endScreen" class="screen hidden"><div class="screen-shade"></div><div class="end-content">

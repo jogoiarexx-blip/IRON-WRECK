@@ -40,3 +40,9 @@ v7.6 (22/10/2026) — Frost Van / Clown Cream Carnage
 - Ataque exclusivo Carnaval de Casquinhas (5 projéteis doces)
 - node --check game.js: PASS
 - tests/smoke-test.js: PASS
+
+v7.7 (22/10/2026):
+- GLB local, cabeçalho glTF v2, textura: verificados
+- garagem: miniatura do GLB correto, indicador de status e botão de tentativa
+- testes de sintaxe, smoke, IA, física, GLB e contrato visual: PASS
+- Chromium localhost: ERR_BLOCKED_BY_ADMINISTRATOR (limitação ambiental)

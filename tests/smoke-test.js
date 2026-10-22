@@ -11,7 +11,7 @@ class V3 {
   lerp(t,a){this.x+=(t.x-this.x)*a;this.y+=(t.y-this.y)*a;this.z+=(t.z-this.z)*a;return this;}
 }
 class Node {
-  constructor(geo,material){this.geometry=geo;this.material=material||{};this.position=new V3();this.rotation={x:0,y:0,z:0,set(x,y,z){this.x=x;this.y=y;this.z=z;}};this.scale={x:1,y:1,z:1,set(x,y,z){this.x=x;this.y=y;this.z=z;},setScalar(v){this.x=v;this.y=v;this.z=v;}};this.children=[];this.visible=true;this.shadow={mapSize:{set(){}},camera:{}};}
+  constructor(geo,material){this.geometry=geo;this.material=material||{};this.position=new V3();this.rotation={x:0,y:0,z:0,set(x,y,z){this.x=x;this.y=y;this.z=z;}};this.scale={x:1,y:1,z:1,set(x,y,z){this.x=x;this.y=y;this.z=z;},setScalar(v){this.x=v;this.y=v;this.z=v;}};this.children=[];this.userData={};this.visible=true;this.shadow={mapSize:{set(){}},camera:{}};}
   add(m){this.children.push(m);}remove(m){this.children=this.children.filter(c=>c!==m);}
   lookAt(){}updateProjectionMatrix(){}updateMatrix(){this.matrix={matrixId:Math.random()};}
 }
@@ -22,7 +22,7 @@ class Curve {
  getPointAt(t){t=((t%1)+1)%1;let p=t*this.points.length;let i=Math.floor(p),a=this.points[i],b=this.points[(i+1)%this.points.length],f=p-i;return new V3(a.x+(b.x-a.x)*f,0,a.z+(b.z-a.z)*f);}
  getTangentAt(t){const a=this.getPointAt(t-.0002),b=this.getPointAt(t+.0002);return new V3(b.x-a.x,0,b.z-a.z).normalize();}
 }
-const classes=['BoxGeometry','SphereGeometry','CylinderGeometry','ConeGeometry','PlaneGeometry','CircleGeometry','TorusGeometry','IcosahedronGeometry','BufferGeometry'];
+const classes=['BoxGeometry','SphereGeometry','CylinderGeometry','ConeGeometry','PlaneGeometry','CircleGeometry','TorusGeometry','TorusKnotGeometry','IcosahedronGeometry','BufferGeometry'];
 const T={Vector3:V3,Scene:Node,Group:Node,Mesh:Node,Sprite:Node,CatmullRomCurve3:Curve,Clock:class{start(){}getDelta(){return 1/60;}},PerspectiveCamera:Node,DirectionalLight:Node,HemisphereLight:Node,MeshBasicMaterial:Mat,MeshStandardMaterial:Mat,SpriteMaterial:Mat,CanvasTexture:class{},FogExp2:class{constructor(){this.color=new Mat()}},Color:Mat,Float32BufferAttribute:class{},
  WebGLRenderer:class{constructor(){this.domElement={};this.shadowMap={};}setSize(){}setPixelRatio(){}render(){}},
  PCFSoftShadowMap:1,ACESFilmicToneMapping:1,SRGBColorSpace:1,DoubleSide:2};
