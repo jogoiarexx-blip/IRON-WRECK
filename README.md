@@ -181,3 +181,8 @@ O `GLTFLoader` (Three.js, MIT) carrega os GLBs de forma assíncrona no navegador
 Este repositório contém o jogo v7.6, o Clown Cream Carnage e 11 veículos. O GLB do carro de sorvete foi **otimizado para a web** (45 mil faces aproximadamente em vez de 450 mil, texturas 512px, e 1,47 MB) para melhorar o carregamento no site. O arquivo original de 23 MB permanece no ZIP de distribuição do projeto. Os GLBs são opcionais para inicialização: se algum não carregar, o jogo recorre aos modelos procedurais.
 
 Os novos efeitos animados (luzes, ornamentos, confetes e projéteis especiais) são realizados via código Three.js, não são animações esqueléticas incorporadas ao arquivo GLB original.
+
+
+## v7.8 — Somente GLB, sem mistura de modelos
+
+O Clown Cream Carnage agora oculta toda a geometria procedural da Frost Van quando o GLB carrega: carroceria, rodas, torres de armas e peças de dano. Os antigos componentes ficam agrupados em um único pai invisível para manter referências físicas e permitir fallback quando o GLB não carregar. Não há mais cone, enfeites ou ornamentos 3D extras sobre o GLB; permanecem apenas partículas temporárias (fumaça/confete) e o ataque Carnaval de Casquinhas. Os outros 10 veículos não foram alterados visualmente.

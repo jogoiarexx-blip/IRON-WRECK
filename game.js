@@ -533,76 +533,44 @@ function spawnCandyRocket(car,spread=0,speed=94){
   g.position.set(car.x+Math.sin(angle)*(car.garage.length*.42+1),3.0,car.z+Math.cos(angle)*(car.garage.length*.42+1));g.rotation.y=angle;
   missiles.push({mesh:g,x:g.position.x,z:g.position.z,y:3.0,yaw:angle,speed,owner:car,ttl:2.1,type:'candy',trail:0,swirl:rand(0,Math.PI*2)});
 }
-function buildClownCreamFx(car){
-  const root=new THREE.Group();root.position.set(0,5.15,.1);car.body.add(root);
-  const topperMat=mat(0xfff0d6,.32,.05,{emissive:0xffb56b,emissiveIntensity:.35});
-  const candyMat=mat(0xff70bf,.28,.1,{emissive:0xff4fb0,emissiveIntensity:.5});
-  const cyanMat=new THREE.MeshBasicMaterial({color:0x7df3ff,transparent:true,opacity:.9,depthWrite:false});
-  const pinkMat=new THREE.MeshBasicMaterial({color:0xff75d7,transparent:true,opacity:.9,depthWrite:false});
-  const glowMats=[cyanMat,pinkMat,new THREE.MeshBasicMaterial({color:0xfff08a,transparent:true,opacity:.92,depthWrite:false}),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.95,depthWrite:false})];
-  const bulbs=[],halo=new THREE.Group();root.add(halo);
-  for(let i=0;i<8;i++){
-    const a=i*Math.PI*2/8,bulb=mesh(new THREE.SphereGeometry(.18,10,8),glowMats[i%glowMats.length],Math.cos(a)*1.18,.18,Math.sin(a)*1.18,halo);
-    bulb.userData=bulb.userData||{};bulb.userData.phase=i*.7;bulbs.push(bulb);
-  }
-  const cone=mesh(new THREE.ConeGeometry(.56,1.35,12),topperMat,0,1.02,0,root);cone.rotation.x=Math.PI;
-  const scoop=mesh(new THREE.SphereGeometry(.48,14,12),candyMat,0,1.82,0,root);
-  const cherry=mesh(new THREE.SphereGeometry(.15,12,10),new THREE.MeshBasicMaterial({color:0xff3048}),0,2.32,0,root);
-  const banner=mesh(new THREE.TorusGeometry(.88,.06,10,22),cyanMat,0,.62,0,root);banner.rotation.x=Math.PI/2;
-  const signPivot=new THREE.Group();signPivot.position.set(0,1.34,1.06);root.add(signPivot);
-  const signPlate=mesh(new THREE.CylinderGeometry(.62,.62,.08,18),pinkMat,0,0,0,signPivot);signPlate.rotation.x=Math.PI/2;
-  const signInner=mesh(new THREE.CylinderGeometry(.44,.44,.09,16),new THREE.MeshBasicMaterial({color:0xfff9d3,transparent:true,opacity:.95}),0,0,.02,signPivot);signInner.rotation.x=Math.PI/2;
-  const spiral=mesh(new THREE.TorusKnotGeometry(.22,.055,42,7,2,3),new THREE.MeshBasicMaterial({color:0x79fff5,transparent:true,opacity:.8}),0,0,.09,signPivot);
-  const streamers=[];
-  for(const side of [-1,1])for(let i=0;i<2;i++){
-    const strip=mesh(new THREE.PlaneGeometry(.18,1.15),new THREE.MeshBasicMaterial({color:side<0?(i?0xff71c9:0xfff28a):(i?0x7df3ff:0xffffff),transparent:true,opacity:.72,side:THREE.DoubleSide,depthWrite:false}),side*.92,.18,-.28+i*.22,root);
-    strip.rotation.y=side<0?.22:-.22;streamers.push(strip);
-  }
-  return {kind:'clownCream',root,halo,bulbs,cone,scoop,cherry,banner,signPivot,signPlate,signInner,spiral,streamers,clock:0,vaporClock:0,dripClock:.07};
-}
+// Efeitos de partículas são independentes do GLB; não inserem outra carroceria,
+// torre, rodas ou enfeites 3D sobre o modelo enviado pelo usuário.
 function updateVehicleAssetFx(car,dt){
-  if(!car.assetFx||car.assetFx.kind!=='clownCream')return;
-  const fx=car.assetFx;fx.clock+=dt;
-  fx.root.rotation.y+=dt*(1.1+Math.abs(car.speed)*.01);
-  fx.root.position.y=5.15+Math.sin(fx.clock*4.2+car.id)*.09;
-  fx.cone.rotation.z=Math.sin(fx.clock*3.4+car.id)*.05;
-  fx.scoop.position.y=1.82+Math.sin(fx.clock*5.3)*.06;
-  fx.cherry.position.y=2.32+Math.sin(fx.clock*7.1)*.04;
-  fx.banner.rotation.z=Math.sin(fx.clock*2.7)*.18;
-  fx.halo.rotation.y+=dt*2.4;
-  fx.signPivot.rotation.z=Math.sin(fx.clock*2.15)*.18;
-  fx.signPivot.rotation.y+=dt*(1.4+Math.abs(car.speed)*.01);
-  fx.spiral.rotation.z+=dt*3.2;
-  let i=0;
-  const hype=car.boosting||car.specialCharge<35||car.boostTime>0;
-  for(const bulb of fx.bulbs){
-    const pulse=.62+.38*Math.sin(fx.clock*(hype?9:6.2)+bulb.userData.phase+i*.25);
-    bulb.scale.setScalar(.8+pulse*.45);
-    if(bulb.material){bulb.material.opacity=.35+pulse*.6;}
-    i++;
-  }
-  for(let k=0;k<fx.streamers.length;k++){
-    const strip=fx.streamers[k];
-    strip.rotation.x=Math.sin(fx.clock*4.5+k)*.22;
-    strip.rotation.z=Math.sin(fx.clock*3.2+k*1.3)*.18;
-    strip.position.y=.18+Math.sin(fx.clock*3.8+k)*.06;
-  }
-  const drifting=car.drifting||Math.abs(car.sideVelocity)>8;
+  const fx=car.assetFx;
+  if(!fx||fx.kind!=='clownCream'||!car.alive)return;
+  fx.clock+=dt;
+  fx.vaporClock-=dt;
+  fx.dripClock-=dt;
   const fast=Math.abs(car.speed)>16||car.boosting;
-  const iced=car.slowTime>0||car.specialCharge<25;
-  fx.vaporClock-=dt;fx.dripClock-=dt;
-  if(fx.dripClock<=0&&(fast||car.hp<70||Math.random()<.25)){
-    fx.dripClock=fast?.05:.12;
-    emitCreamDrip(car,fast?4:2);
+  const drifting=car.drifting||Math.abs(car.sideVelocity)>8;
+  if(fx.dripClock<=0&&(fast||car.hp<70)){
+    fx.dripClock=fast?.13:.22;
+    emitCreamDrip(car,fast?3:1);
   }
-  if(fx.vaporClock<=0&&(fast||drifting||iced||hype)){
-    fx.vaporClock=fast?.045:drifting?.07:.12;
-    emitSweetToothBurst(car,fast?9:5);
-    emitCandyConfetti(car.x,car.z,fast?6:3,fast?2.2:1.3);
-    if(Math.random()<.7)emitSmoke(car.x-Math.sin(car.yaw)*2.1,car.z-Math.cos(car.yaw)*2.1,fast?0xb7f8ff:0xfbe2ff);
+  if(fx.vaporClock<=0&&(fast||drifting||car.specialCharge<25)){
+    fx.vaporClock=fast?.14:.24;
+    emitSweetToothBurst(car,fast?3:2);
+    if(graphicsQuality!=='low')emitCandyConfetti(car.x,car.z,2,1.8);
   }
 }
-
+// Apenas no Clown Cream: TODOS os componentes visuais gerados pelo jogo
+// são transferidos para um pai invisível. Mantemos os objetos e referências
+// físicas (rodas/danos/turret) para não quebrar a simulação, mas eles jamais
+// são desenhados enquanto a carroceria GLB estiver ativa.
+function hideFrostProceduralRig(car,skin){
+  if(car.vehicleIndex!==5||car.proceduralRig)return;
+  const proceduralParts=car.body.children.filter(child=>child!==skin);
+  const hidden=new THREE.Group();
+  hidden.name='HIDDEN_FROST_PROCEDURAL_FALLBACK';
+  car.body.add(hidden);
+  for(const part of proceduralParts)hidden.add(part); // THREE.Group.add faz o reparent corretamente.
+  hidden.visible=false;
+  car.proceduralRig=hidden;
+  // Além do pai invisível, indicadores explícitos facilitam o diagnóstico.
+  car.visualShell.visible=false;
+  car.turret.visible=false;
+  for(const mount of car.wheelMounts)mount.group.visible=false;
+}
 
 function attachVehicleAsset(car){
   const template=loadedVehicleTemplates.get(car.vehicleIndex);
@@ -634,8 +602,10 @@ function attachVehicleAsset(car){
     skin.position.set(0,3.68,0);
   }
   car.body.add(skin);car.assetSkin=skin;car.assetMaterials=materials;car.assetMorphMeshes=morphMeshes;
-  car.visualShell.visible=false; // rodas, torre e danos continuam independentes.
-  if(car.vehicleIndex===5)car.assetFx=buildClownCreamFx(car);
+  if(car.vehicleIndex===5){
+    hideFrostProceduralRig(car,skin);
+    car.assetFx={kind:'clownCream',clock:0,vaporClock:0,dripClock:.12};
+  }else car.visualShell.visible=false; // Outros carros mantêm rodas/armas do jogo.
   applyAssetDamageTint(car);
   applyAssetDents(car);
   return true;

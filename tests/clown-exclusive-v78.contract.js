@@ -1,0 +1,10 @@
+const fs=require('fs'),path=require('path'),assert=require('assert');
+const src=fs.readFileSync(path.join(__dirname,'../game.js'),'utf8');
+assert(src.includes('function hideFrostProceduralRig(car,skin)'), 'exclusive GLB scene must hide procedural rig');
+assert(src.includes("hidden.name='HIDDEN_FROST_PROCEDURAL_FALLBACK'"));
+assert(src.includes('hidden.visible=false;'));
+assert(src.includes('car.turret.visible=false;'));
+assert(src.includes('for(const mount of car.wheelMounts)mount.group.visible=false;'));
+assert(src.includes("car.assetFx={kind:'clownCream',clock:0,vaporClock:0,dripClock:.12};"));
+assert(!src.includes('function buildClownCreamFx(car){'), 'avoid persistent generated 3D ornaments');
+console.log('PASS: Frost Van exclusive GLB render contract.');
