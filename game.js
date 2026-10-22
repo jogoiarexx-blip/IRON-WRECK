@@ -561,11 +561,12 @@ function hideFrostProceduralRig(car,skin){
   if(car.vehicleIndex!==5||car.proceduralRig)return;
   const proceduralParts=car.body.children.filter(child=>child!==skin);
   const hidden=new THREE.Group();
-  hidden.name='HIDDEN_FROST_PROCEDURAL_FALLBACK';
-  car.body.add(hidden);
-  for(const part of proceduralParts)hidden.add(part); // THREE.Group.add faz o reparent corretamente.
+  hidden.name='DETACHED_FROST_PROCEDURAL_FALLBACK';
+  // NÃO adicionamos o antigo rig de volta à árvore visível. Assim, mesmo que
+  // dano/reparo altere visible nas peças, elas não podem ser renderizadas.
+  for(const part of proceduralParts)hidden.add(part); // THREE.Group.add reparent/desanexa de car.body.
   hidden.visible=false;
-  car.proceduralRig=hidden;
+  car.proceduralRig=hidden; // apenas dados/transformações necessários à simulação.
   // Além do pai invisível, indicadores explícitos facilitam o diagnóstico.
   car.visualShell.visible=false;
   car.turret.visible=false;
@@ -959,7 +960,10 @@ function disposeDynamic(root){
   visit(root);scene.remove(root);
 }
 function clearDynamic(){
-  for(const c of cars)disposeDynamic(c.group);
+  for(const c of cars){
+    if(c.proceduralRig)disposeDynamic(c.proceduralRig); // peças antigas desanexadas
+    disposeDynamic(c.group);
+  }
   for(const p of debris)disposeDynamic(p.mesh);
   for(const m of missiles)disposeDynamic(m.mesh);
   for(const m of mines)disposeDynamic(m.mesh);
