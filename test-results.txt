@@ -1,28 +1,42 @@
-IRON WRECK v6.0 — TESTES AUTOMATIZADOS
+IRON WRECK v7.0 — RELATÓRIO DE TESTES
 
-PASS  node --check game.js — sintaxe JavaScript
-PASS  node tests/smoke-test.js — direção corrigida, 10 veículos,
-      3 arenas, 30 combinações, metralhadora, foguetes, especiais,
-      colisões, reparo, dano, vitória e derrota.
-PASS  node tests/visual-smoke.js — >=85 peças por carro,
-      animação das rodas, ondas de choque, preset gráfico e galeria.
-PASS  node tests/physics-v6.test.js — transferência de momento na batida,
-      ônibus vs carro, conservação arcade, suspensão com molas,
-      deslizamento lateral, amassados localizados,
-      núcleo de explosão e limpeza; 3.000 quadros simulados em 30 combinações.
-PASS  node tests/export_geometry.js — 10 modelos e 3 arenas exportados.
-PASS  python tests/render_previews.py — imagens geradas em software VTK.
+Executados com Node.js 22 no ambiente de criação:
+- tests/smoke-test.js: PASS — controles, armas, 8 carros, 3 arenas, combos 10x3, dano, fim de jogo.
+- tests/visual-smoke.js: PASS — 10 modelos com detalhes, rodas, partículas, 3 opções gráficas e miniaturas.
+- tests/physics-v6.test.js: PASS — transferência de momento, amassados, amortecimento, 3.000 frames simulados em 30 combinações.
+- tests/ai-v7.test.js: PASS — seleção tática, recuo/reabastecimento, flanqueamento, recuperação de travamento, desvio, linha de visão, tiros e foguetes bloqueados, 3 dificuldades.
+- node --check game.js: PASS — sintaxe JavaScript.
 
-LIMITAÇÕES:
-- WebGL em Chrome/Edge reais: NÃO VALIDADO, pois CDN do Three.js
-  é inacessível nesta execução. Requer conexão ao executar o jogo.
-- FPS em máquina Windows e comportamento de controle em hardware real:
-  NÃO MEDIDOS. Os testes não substituem avaliação jogando.
-- Galeria: geometrias renderizadas no VTK, não capturas do gameplay.
+LIMITAÇÃO: navegação local no Chromium de teste bloqueada pelo ambiente (ERR_BLOCKED_BY_ADMINISTRATOR), e a rede externa não carrega a distribuição Three.js. Renderização WebGL, áudio em dispositivo físico e FPS reais permanecem NÃO VERIFICADOS; executar o projeto num Chrome/Edge/Firefox real com internet para validar.
+
+Não foi adicionado `.exe` nativo. `ABRIR-JOGO.cmd` abre o jogo no navegador do Windows.
+
+v7.1 (19/10/2026) — InstancedMesh estático
+- `node --check game.js`: PASS
+- `node tests/smoke-test.js`: PASS; 102 faixas + 160 janelas + 168 nervuras = 430 detalhes em 3 grupos
+- `node tests/ai-v7.test.js`: PASS
+- `node tests/physics-v6.test.js`: PASS
+- `node tests/visual-smoke.js`: PASS
+- Renderização WebGL/FPS físicos: NÃO VALIDADOS
 
 
-v7.1 (19/10/2026) — InstancedMesh
+v7.4 (19/10/2026) — Reaper Bike
+- Moto adicionada como 11º veículo da garagem
+- Carroceria procedural nova com 2 rodas, baixa massa e alta dirigibilidade
+- Especial: Corrente Elétrica (baseado no hook)
 - node --check game.js: PASS
-- smoke-test.js, ai-v7.test.js, physics-v6.test.js, visual-smoke.js: PASS
-- 430 detalhes decorativos em 3 lotes de InstancedMesh
-- FPS/WebGL real: não validado.
+- tests/smoke-test.js: PASS
+- Publicação automática no GitHub: pendente neste ambiente
+
+
+v7.5 (22/10/2026) — Clown Cream Carnage
+- Slot FROST VAN substituído pelo GLB enviado pelo usuário
+- Efeitos: topper/halo animados, luzes pulsantes, fumaça gelada e burst doce no especial
+- Backup do GLB anterior preservado
+
+
+v7.6 (22/10/2026) — Frost Van / Clown Cream Carnage
+- Efeitos melhorados do carro de sorvete
+- Ataque exclusivo Carnaval de Casquinhas (5 projéteis doces)
+- node --check game.js: PASS
+- tests/smoke-test.js: PASS

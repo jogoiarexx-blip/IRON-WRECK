@@ -1,4 +1,16 @@
 let THREE;
+// v7.2: modelos originais GLB para dois veículos. A lógica de direção,
+// física, suspensão, colisões e armas permanece na implementação existente.
+const VEHICLE_GLB={
+  0:'assets/marauder.glb',1:'assets/phantom.glb',2:'assets/titan.glb',
+  3:'assets/omega-bus.glb',4:'assets/grinder.glb',5:'assets/frost-van.glb',
+  6:'assets/hookjaw.glb',7:'assets/inferno.glb',8:'assets/sentinel.glb',9:'assets/goliath.glb'
+}; // índice 10 (moto) usa carroceria procedural por enquanto.
+
+const loadedVehicleTemplates=new Map(), assetPending=new Map();
+const assetSharedGeometries=new Set(), assetSharedMaterials=new Set(), assetSharedTextures=new Set();
+let gltfAssetLoader=null;
+
 
 // IRON WRECK v7.0 — combate tático com IA, navegação local, cobertura e recuperação de travamentos.
 const $ = id => document.getElementById(id);
@@ -16,11 +28,12 @@ const GARAGE = [
  {name:'TITAN',className:'CAMINHÃO DE GUERRA',icon:'🚛',speed:.82,armor:1.38,damage:.95,mass:1.75,turn:.78,accel:.78,width:4.9,length:8.7,wheel:1.34,color:0xcf664b,special:'PULSO DE FERRO',specialType:'pulse'},
  {name:'OMEGA BUS',className:'ÔNIBUS BLINDADO',icon:'🚌',speed:.68,armor:1.62,damage:1.04,mass:2.4,turn:.62,accel:.60,width:5.05,length:15.0,wheel:1.40,color:0xe6a93b,special:'BUZINA SÍSMICA',specialType:'horn'},
  {name:'GRINDER',className:'CAMINHÃO DE LIXO',icon:'🚛',speed:.73,armor:1.78,damage:1.1,mass:2.6,turn:.65,accel:.65,width:5.1,length:11.6,wheel:1.43,color:0x568b54,special:'COMPACTADOR',specialType:'crusher'},
- {name:'FROST VAN',className:'VAN DE SORVETE',icon:'🍦',speed:1.06,armor:.83,damage:1,mass:1,turn:1.08,accel:1.10,width:4.35,length:8.6,wheel:1.19,color:0xf5a3c0,special:'TEMPESTADE GELADA',specialType:'frost'},
+ {name:'FROST VAN',className:'CLOWN CREAM CARNAGE',icon:'🍦',speed:1.06,armor:.83,damage:1,mass:1,turn:1.08,accel:1.10,width:4.35,length:8.6,wheel:1.19,color:0xf5a3c0,special:'CARNAVAL DE CASQUINHAS',specialType:'frost'},
  {name:'HOOKJAW',className:'GUINCHO BRUTAL',icon:'🪝',speed:.88,armor:1.24,damage:1.04,mass:1.64,turn:.90,accel:.86,width:4.8,length:10.4,wheel:1.30,color:0xd67c39,special:'GANCHO MAGNÉTICO',specialType:'hook'},
  {name:'INFERNO',className:'CAMINHÃO DE BOMBEIROS',icon:'🚒',speed:.78,armor:1.48,damage:1.05,mass:2.12,turn:.72,accel:.73,width:5.0,length:12.5,wheel:1.36,color:0xda3834,special:'JATO DE PRESSÃO',specialType:'water'},
  {name:'SENTINEL',className:'SUV DE PATRULHA',icon:'🚓',speed:1.14,armor:1.07,damage:1.0,mass:1.18,turn:1.09,accel:1.07,width:4.4,length:8.15,wheel:1.2,color:0x5177b7,special:'SIRENE EMP',specialType:'siren'},
- {name:'GOLIATH',className:'MONSTER TRUCK',icon:'🛻',speed:.95,armor:1.35,damage:1.18,mass:1.9,turn:.88,accel:.98,width:5.55,length:9.35,wheel:1.93,color:0x8e71d3,special:'SALTO ESMAGADOR',specialType:'stomp'}
+ {name:'GOLIATH',className:'MONSTER TRUCK',icon:'🛻',speed:.95,armor:1.35,damage:1.18,mass:1.9,turn:.88,accel:.98,width:5.55,length:9.35,wheel:1.93,color:0x8e71d3,special:'SALTO ESMAGADOR',specialType:'stomp'},
+ {name:'REAPER BIKE',className:'MOTO DE ASSALTO',icon:'🏍️',speed:1.36,armor:.56,damage:.92,mass:.46,turn:1.42,accel:1.34,width:2.15,length:6.95,wheel:1.02,color:0x53f0a8,special:'CORRENTE ELÉTRICA',specialType:'hook'}
 ];
 // Raio físico escalado com o comprimento e largura: ônibus e caminhões são alvos maiores.
 const bodyRadius = vehicle => Math.max(vehicle.width*.54,vehicle.length*.34)+.05;
@@ -414,125 +427,370 @@ function addVehicleDetails(body,garage,index,paint,metal,dark){
     for(const x of [-.9,.9])box(.2,.2,1.6,alloy,x,2.39,front-1.3,body);
   }
 }
+// Carregamento opcional e não bloqueante. Arquivos glb locais precisam de HTTP(S).
+// Caso a rede/loader falhe, o jogo continua usando as carrocerias procedurais.
+async function startVehicleAssets(){
+  if(typeof location!=='undefined'&&location.protocol==='file:'){
+    console.info('Carrocerias GLB exigem HTTP: fallback procedural em file://');return;
+  }
+  try{
+    const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
+    gltfAssetLoader=new GLTFLoader();
+    await Promise.allSettled(Object.keys(VEHICLE_GLB).map(index=>loadVehicleTemplate(Number(index))));
+  }catch(error){console.warn('GLTFLoader indisponível, mantendo carrocerias procedurais',error);}
+}
+function loadVehicleTemplate(index){
+  if(loadedVehicleTemplates.has(index))return Promise.resolve(loadedVehicleTemplates.get(index));
+  if(assetPending.has(index))return assetPending.get(index);
+  if(!gltfAssetLoader||!VEHICLE_GLB[index])return Promise.resolve(null);
+  const job=gltfAssetLoader.loadAsync(VEHICLE_GLB[index]).then(gltf=>{
+    const template=gltf.scene;
+    template.traverse(node=>{
+      if(node.isMesh){assetSharedGeometries.add(node.geometry);
+        if(Array.isArray(node.material))for(const m of node.material)assetSharedMaterials.add(m);
+        else assetSharedMaterials.add(node.material);
+        for(const material of (Array.isArray(node.material)?node.material:[node.material])){
+          for(const value of Object.values(material))if(value?.isTexture)assetSharedTextures.add(value);
+        }
+      }
+    });
+    loadedVehicleTemplates.set(index,template);
+    for(const car of cars)if(car.vehicleIndex===index)attachVehicleAsset(car);
+    return template;
+  }).catch(error=>{console.warn('GLB não carregado:',VEHICLE_GLB[index],error);return null;
+  }).finally(()=>assetPending.delete(index));
+  assetPending.set(index,job);return job;
+}
+
+function emitSweetToothBurst(car,count=10){
+  const colors=[0xff66cc,0x7df3ff,0xfff28a,0xffffff];
+  const rearX=car.x-Math.sin(car.yaw)*(car.garage.length*.34);
+  const rearZ=car.z-Math.cos(car.yaw)*(car.garage.length*.34);
+  for(let i=0;i<count;i++){
+    const c=colors[i%colors.length],a=rand(0,Math.PI*2),spread=rand(.4,2.1);
+    createParticle(rearX+rand(-.7,.7),2.2+rand(0,.9),rearZ+rand(-.7,.7),c,rand(.12,.34),Math.cos(a)*spread,rand(.8,2.7),Math.sin(a)*spread,rand(.25,.7));
+  }
+}
+
+function emitCandyConfetti(x,z,count=16,power=3){
+  const colors=[0xff66cc,0x7df3ff,0xfff28a,0xffffff,0x96ff6e];
+  for(let i=0;i<count;i++){
+    const a=rand(0,Math.PI*2),v=rand(2,power*3.4+2),c=colors[i%colors.length];
+    createParticle(x+rand(-1.1,1.1),1.4+rand(0,1.2),z+rand(-1.1,1.1),c,rand(.11,.28),Math.cos(a)*v,rand(3,10),Math.sin(a)*v,rand(.45,.95));
+  }
+}
+function emitCreamDrip(car,count=3){
+  for(let i=0;i<count;i++){
+    createParticle(car.x+rand(-1.2,1.2),4.8+rand(0,.9),car.z+rand(-1.2,1.2),choose([0xffd9ef,0xfdf1b8,0xc4f8ff]),rand(.08,.16),rand(-.4,.4),rand(-1.6,-.4),rand(-.4,.4),rand(.35,.8));
+  }
+}
+function spawnCandyRocket(car,spread=0,speed=94){
+  const angle=car.yaw+spread;
+  const g=new THREE.Group();scene.add(g);
+  const shell=mesh(new THREE.CylinderGeometry(.28,.28,1.9,10),mat(0xffd2ef,.28,.08,{emissive:0xff8fd7,emissiveIntensity:.45}),0,0,0,g);shell.rotation.x=Math.PI/2;
+  const scoop=mesh(new THREE.SphereGeometry(.34,12,10),mat(0xf8f1ff,.25,.05,{emissive:0xffffff,emissiveIntensity:.25}),0,0,.95,g);
+  const cherry=mesh(new THREE.SphereGeometry(.1,10,8),new THREE.MeshBasicMaterial({color:0xff3254}),0,.28,1.08,g);
+  const glow=mesh(new THREE.TorusGeometry(.24,.06,8,14),new THREE.MeshBasicMaterial({color:0x8cf7ff,transparent:true,opacity:.88,depthWrite:false}),0,0,-.65,g);glow.rotation.x=Math.PI/2;
+  g.position.set(car.x+Math.sin(angle)*(car.garage.length*.42+1),3.0,car.z+Math.cos(angle)*(car.garage.length*.42+1));g.rotation.y=angle;
+  missiles.push({mesh:g,x:g.position.x,z:g.position.z,y:3.0,yaw:angle,speed,owner:car,ttl:2.1,type:'candy',trail:0,swirl:rand(0,Math.PI*2)});
+}
+function buildClownCreamFx(car){
+  const root=new THREE.Group();root.position.set(0,5.15,.1);car.body.add(root);
+  const topperMat=mat(0xfff0d6,.32,.05,{emissive:0xffb56b,emissiveIntensity:.35});
+  const candyMat=mat(0xff70bf,.28,.1,{emissive:0xff4fb0,emissiveIntensity:.5});
+  const cyanMat=new THREE.MeshBasicMaterial({color:0x7df3ff,transparent:true,opacity:.9,depthWrite:false});
+  const pinkMat=new THREE.MeshBasicMaterial({color:0xff75d7,transparent:true,opacity:.9,depthWrite:false});
+  const glowMats=[cyanMat,pinkMat,new THREE.MeshBasicMaterial({color:0xfff08a,transparent:true,opacity:.92,depthWrite:false}),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.95,depthWrite:false})];
+  const bulbs=[],halo=new THREE.Group();root.add(halo);
+  for(let i=0;i<8;i++){
+    const a=i*Math.PI*2/8,bulb=mesh(new THREE.SphereGeometry(.18,10,8),glowMats[i%glowMats.length],Math.cos(a)*1.18,.18,Math.sin(a)*1.18,halo);
+    bulb.userData.phase=i*.7;bulbs.push(bulb);
+  }
+  const cone=mesh(new THREE.ConeGeometry(.56,1.35,12),topperMat,0,1.02,0,root);cone.rotation.x=Math.PI;
+  const scoop=mesh(new THREE.SphereGeometry(.48,14,12),candyMat,0,1.82,0,root);
+  const cherry=mesh(new THREE.SphereGeometry(.15,12,10),new THREE.MeshBasicMaterial({color:0xff3048}),0,2.32,0,root);
+  const banner=mesh(new THREE.TorusGeometry(.88,.06,10,22),cyanMat,0,.62,0,root);banner.rotation.x=Math.PI/2;
+  const signPivot=new THREE.Group();signPivot.position.set(0,1.34,1.06);root.add(signPivot);
+  const signPlate=mesh(new THREE.CylinderGeometry(.62,.62,.08,18),pinkMat,0,0,0,signPivot);signPlate.rotation.x=Math.PI/2;
+  const signInner=mesh(new THREE.CylinderGeometry(.44,.44,.09,16),new THREE.MeshBasicMaterial({color:0xfff9d3,transparent:true,opacity:.95}),0,0,.02,signPivot);signInner.rotation.x=Math.PI/2;
+  const spiral=mesh(new THREE.TorusKnotGeometry(.22,.055,42,7,2,3),new THREE.MeshBasicMaterial({color:0x79fff5,transparent:true,opacity:.8}),0,0,.09,signPivot);
+  const streamers=[];
+  for(const side of [-1,1])for(let i=0;i<2;i++){
+    const strip=mesh(new THREE.PlaneGeometry(.18,1.15),new THREE.MeshBasicMaterial({color:side<0?(i?0xff71c9:0xfff28a):(i?0x7df3ff:0xffffff),transparent:true,opacity:.72,side:THREE.DoubleSide,depthWrite:false}),side*.92,.18,-.28+i*.22,root);
+    strip.rotation.y=side<0?.22:-.22;streamers.push(strip);
+  }
+  return {kind:'clownCream',root,halo,bulbs,cone,scoop,cherry,banner,signPivot,signPlate,signInner,spiral,streamers,clock:0,vaporClock:0,dripClock:.07};
+}
+function updateVehicleAssetFx(car,dt){
+  if(!car.assetFx||car.assetFx.kind!=='clownCream')return;
+  const fx=car.assetFx;fx.clock+=dt;
+  fx.root.rotation.y+=dt*(1.1+Math.abs(car.speed)*.01);
+  fx.root.position.y=5.15+Math.sin(fx.clock*4.2+car.id)*.09;
+  fx.cone.rotation.z=Math.sin(fx.clock*3.4+car.id)*.05;
+  fx.scoop.position.y=1.82+Math.sin(fx.clock*5.3)*.06;
+  fx.cherry.position.y=2.32+Math.sin(fx.clock*7.1)*.04;
+  fx.banner.rotation.z=Math.sin(fx.clock*2.7)*.18;
+  fx.halo.rotation.y+=dt*2.4;
+  fx.signPivot.rotation.z=Math.sin(fx.clock*2.15)*.18;
+  fx.signPivot.rotation.y+=dt*(1.4+Math.abs(car.speed)*.01);
+  fx.spiral.rotation.z+=dt*3.2;
+  let i=0;
+  const hype=car.boosting||car.specialCharge<35||car.boostTime>0;
+  for(const bulb of fx.bulbs){
+    const pulse=.62+.38*Math.sin(fx.clock*(hype?9:6.2)+bulb.userData.phase+i*.25);
+    bulb.scale.setScalar(.8+pulse*.45);
+    if(bulb.material){bulb.material.opacity=.35+pulse*.6;}
+    i++;
+  }
+  for(let k=0;k<fx.streamers.length;k++){
+    const strip=fx.streamers[k];
+    strip.rotation.x=Math.sin(fx.clock*4.5+k)*.22;
+    strip.rotation.z=Math.sin(fx.clock*3.2+k*1.3)*.18;
+    strip.position.y=.18+Math.sin(fx.clock*3.8+k)*.06;
+  }
+  const drifting=car.drifting||Math.abs(car.sideVelocity)>8;
+  const fast=Math.abs(car.speed)>16||car.boosting;
+  const iced=car.slowTime>0||car.specialCharge<25;
+  fx.vaporClock-=dt;fx.dripClock-=dt;
+  if(fx.dripClock<=0&&(fast||car.hp<70||Math.random()<.25)){
+    fx.dripClock=fast?.05:.12;
+    emitCreamDrip(car,fast?4:2);
+  }
+  if(fx.vaporClock<=0&&(fast||drifting||iced||hype)){
+    fx.vaporClock=fast?.045:drifting?.07:.12;
+    emitSweetToothBurst(car,fast?9:5);
+    emitCandyConfetti(car.x,car.z,fast?6:3,fast?2.2:1.3);
+    if(Math.random()<.7)emitSmoke(car.x-Math.sin(car.yaw)*2.1,car.z-Math.cos(car.yaw)*2.1,fast?0xb7f8ff:0xfbe2ff);
+  }
+}
+
+
+function attachVehicleAsset(car){
+  const template=loadedVehicleTemplates.get(car.vehicleIndex);
+  if(!template||!cars.includes(car)||car.assetSkin)return false;
+  const skin=template.clone(true),materials=[],morphMeshes=[];
+  // Cópias de materiais permitem avarias visuais por veículo sem contaminar
+  // as carrocerias de outros oponentes que compartilham a mesma geometria.
+  skin.traverse(node=>{if(node.isMesh){
+    // A geometria original dos GLBs é compartilhada. Cada veículo em combate
+    // precisa de sua própria cópia para permitir deformação sem afetar rivais.
+    if(node.geometry?.attributes?.position && node.geometry.clone){
+      node.geometry=node.geometry.clone();
+      const pos=node.geometry.attributes.position;
+      morphMeshes.push({geometry:node.geometry,base:new Float32Array(pos.array)});
+    }
+    node.material=Array.isArray(node.material)?node.material.map(m=>m.clone()):node.material.clone();
+    const mm=Array.isArray(node.material)?node.material:[node.material];
+    for(const m of mm){if(m.color){m.userData.basePaint=m.color.clone();materials.push(m);}}
+    node.castShadow=true;node.receiveShadow=true;
+  }});
+  if(car.vehicleIndex===5){
+    skin.rotation.y=Math.PI/2;
+    skin.scale.set(4.4,3.3,4.4);
+    skin.position.set(0,3.68,0);
+  }
+  car.body.add(skin);car.assetSkin=skin;car.assetMaterials=materials;car.assetMorphMeshes=morphMeshes;
+  car.visualShell.visible=false; // rodas, torre e danos continuam independentes.
+  if(car.vehicleIndex===5)car.assetFx=buildClownCreamFx(car);
+  applyAssetDamageTint(car);
+  applyAssetDents(car);
+  return true;
+}
+function applyAssetDamageTint(car){
+  if(!car.assetMaterials)return;
+  const intensity=car.hp<20?.47:car.hp<40?.61:car.hp<65?.77:car.hp<83?.90:1;
+  for(const m of car.assetMaterials){m.color.copy(m.userData.basePaint).multiplyScalar(intensity);}
+}
+// Deformação 3D por contato: altera vértices do GLB do próprio carro, em vez
+// de escurecer toda a peça. Recalcula a partir da malha original para que o
+// reparo recupere a forma. Funciona com dez modelos + fallback procedural.
+function applyAssetDents(car){
+  if(!car.assetMorphMeshes?.length)return;
+  const health=clamp(car.hp,0,100),dent=clamp((83-health)/83,0,1);
+  const side=car.damageSide||'hood',stamp=side+':'+Math.round(health*2)/2;
+  if(car.assetDentStamp===stamp)return;
+  car.assetDentStamp=stamp;
+  const halfW=car.garage.width*.5, halfL=car.garage.length*.5;
+  for(const part of car.assetMorphMeshes){
+    const geo=part.geometry,attr=geo?.attributes?.position;
+    if(!attr||!part.base)continue;
+    const xyz=part.base;
+    for(let i=0;i<attr.count;i++){
+      const ix=i*3,x=xyz[ix],y=xyz[ix+1],z=xyz[ix+2];
+      // Influência centrada na região atingida, sem reposicionar as rodas/armas.
+      const dFront=(z-halfL*.72)/Math.max(1,halfL*.52);
+      const dRear=(z+halfL*.72)/Math.max(1,halfL*.52);
+      const sideMid=z/Math.max(1,halfL*.85);
+      let influence=0,nx=x,ny=y,nz=z;
+      if(side==='hood'){
+        influence=Math.exp(-2.1*(dFront*dFront+(x/(halfW*.9))**2));
+        nz=z-dent*.72*influence;ny=y-dent*.14*influence;
+      }else if(side==='bumper'){
+        influence=Math.exp(-2.2*(dRear*dRear+(x/(halfW*.9))**2));
+        nz=z+dent*.66*influence;ny=y-dent*.10*influence;
+      }else{
+        const sign=side==='left'?-1:1;
+        const dx=(x-sign*halfW*.86)/Math.max(.65,halfW*.6);
+        influence=Math.exp(-1.8*(dx*dx+sideMid*sideMid));
+        nx=x-sign*dent*.58*influence;
+        ny=y-dent*.08*influence;
+      }
+      attr.setXYZ(i,nx,ny,nz);
+    }
+    attr.needsUpdate=true;
+    geo.computeVertexNormals?.();geo.computeBoundingSphere?.();
+  }
+}
 function createKart(color,name,isPlayer=false,vehicleIndex=0){
   const garage=GARAGE[vehicleIndex],g=new THREE.Group();scene.add(g);
   const body=new THREE.Group();g.add(body);
+  const visualShell=new THREE.Group();body.add(visualShell);
   const paint=paintFinish(color),silver=mat(0xc4cdd1,.35,.75),metal=mat(0x65727a,.63,.59),dark=mat(0x252b32,.82,.2),rust=mat(0x976953,.87,.15),glass=mat(0x76b7c7,.22,.5,{transparent:true,opacity:.84}),lamp=mat(0xffdca3,.3,.1,{emissive:0xffbd53,emissiveIntensity:.7});
   const w=garage.width,len=garage.length,front=len/2,back=-len/2;
   const tw=garage.wheel;
-  box(w,1.24,len,paint,0,1.36,0,body);
-  box(w*.94,.3,len*.91,dark,0,2.09,0,body);
+  box(w,1.24,len,paint,0,1.36,0,visualShell);
+  box(w*.94,.3,len*.91,dark,0,2.09,0,visualShell);
   for(const z of [front+.19,back-.19]){
-    box(w+.55,.65,.72,silver,0,1.0,z,body);
-    box(w*.84,.24,.3,dark,0,1.43,z+(z>0?.41:-.41),body);
+    box(w+.55,.65,.72,silver,0,1.0,z,visualShell);
+    box(w*.84,.24,.3,dark,0,1.43,z+(z>0?.41:-.41),visualShell);
   }
   for(const x of [-w*.32,w*.32]){
-    box(.8,.34,.18,lamp,x,1.53,front+.54,body);
-    box(.7,.28,.18,mat(0xab3431,.4,.1,{emissive:0x501412,emissiveIntensity:.4}),x,1.51,back-.54,body);
+    box(.8,.34,.18,lamp,x,1.53,front+.54,visualShell);
+    box(.7,.28,.18,mat(0xab3431,.4,.1,{emissive:0x501412,emissiveIntensity:.4}),x,1.51,back-.54,visualShell);
   }
   // Todas as carrocerias têm a frente no eixo +Z, de acordo com física, mira e câmera.
-  if(vehicleIndex===0 || vehicleIndex===1){
+  if(vehicleIndex===10){ // Moto de assalto
+    const frame=mat(0x161a1f,.64,.42),accent=mat(0x59f0b2,.38,.16,{emissive:0x1b8f64,emissiveIntensity:.25});
+    box(w*.36,.42,len*.72,paint,0,1.56,0,visualShell);
+    box(w*.22,.34,len*.25,dark,0,2.02,-.55,visualShell);
+    box(w*.32,.26,len*.20,accent,0,1.83,1.15,visualShell);
+    box(w*.18,.10,1.28,silver,0,2.34,-1.18,visualShell);
+    for(const side of [-1,1]){
+      box(.08,.66,1.18,silver,side*.44,2.05,1.28,visualShell);
+      box(.08,.26,.9,silver,side*.54,2.56,-1.34,visualShell);
+      box(.08,.08,.66,M.chrome,side*.66,2.64,-1.72,visualShell);
+    }
+    box(.22,.18,.95,frame,0,1.18,-.32,visualShell);
+    box(.18,.14,.84,frame,0,1.07,1.65,visualShell);
+    box(.46,.18,.22,lamp,0,1.92,front+.34,visualShell);
+    box(.36,.15,.18,mat(0xab3431,.4,.1,{emissive:0x501412,emissiveIntensity:.4}),0,1.88,back-.28,visualShell);
+  }else if(vehicleIndex===0 || vehicleIndex===1){
     const sport=vehicleIndex===1;
-    box(w*.86,sport?1.05:1.44,len*.44,dark,0,sport?2.63:2.82,-.7,body);
-    box(w*.76,.72,.18,glass,0,2.74,len*.08,body);
-    box(w*.88,.2,len*.39,paint,0,sport?3.26:3.57,-.7,body);
-    box(w*.89,.52,len*.31,paint,0,2.12,len*.29,body);
-    box(w*.83,.18,1.4,dark,0,2.29,back+.7,body);
-    for(const x of [-w*.39,w*.39])box(.42,.78,2,rust,x,2.2,.0,body);
-    if(sport){box(w*.93,.23,.54,silver,0,2.57,back+.2,body);}
-    else for(const x of [-.9,.9])box(.22,.44,1.62,silver,x,2.63,len*.27,body);
+    box(w*.86,sport?1.05:1.44,len*.44,dark,0,sport?2.63:2.82,-.7,visualShell);
+    box(w*.76,.72,.18,glass,0,2.74,len*.08,visualShell);
+    box(w*.88,.2,len*.39,paint,0,sport?3.26:3.57,-.7,visualShell);
+    box(w*.89,.52,len*.31,paint,0,2.12,len*.29,visualShell);
+    box(w*.83,.18,1.4,dark,0,2.29,back+.7,visualShell);
+    for(const x of [-w*.39,w*.39])box(.42,.78,2,rust,x,2.2,.0,visualShell);
+    if(sport){box(w*.93,.23,.54,silver,0,2.57,back+.2,visualShell);}
+    else for(const x of [-.9,.9])box(.22,.44,1.62,silver,x,2.63,len*.27,visualShell);
   }else if(vehicleIndex===2){ // Caminhão de guerra
-    box(w*.85,2.25,3.4,paint,0,3.12,front-2.15,body);
-    box(w*.75,.9,.17,glass,0,3.75,front-.38,body);
-    box(w*.92,1.58,len*.48,rust,0,3.05,back+len*.27,body);
-    for(const z of [-2.8,-.85])box(w+.14,.36,.25,metal,0,4.03,z,body);
-    box(w*.82,.38,len*.42,metal,0,4.12,back+len*.26,body);
+    box(w*.85,2.25,3.4,paint,0,3.12,front-2.15,visualShell);
+    box(w*.75,.9,.17,glass,0,3.75,front-.38,visualShell);
+    box(w*.92,1.58,len*.48,rust,0,3.05,back+len*.27,visualShell);
+    for(const z of [-2.8,-.85])box(w+.14,.36,.25,metal,0,4.03,z,visualShell);
+    box(w*.82,.38,len*.42,metal,0,4.12,back+len*.26,visualShell);
   }else if(vehicleIndex===3){ // Ônibus: corpo longo, janelas repetidas, porta e letreiro
-    box(w*.96,3.8,len*.94,paint,0,3.79,0,body);
-    box(w*.98,.35,len*.97,dark,0,5.83,0,body);
-    box(w*.82,1.45,.18,glass,0,4.35,front-.24,body);
-    box(w*.82,.38,.2,dark,0,5.42,front+.13,body);
+    box(w*.96,3.8,len*.94,paint,0,3.79,0,visualShell);
+    box(w*.98,.35,len*.97,dark,0,5.83,0,visualShell);
+    box(w*.82,1.45,.18,glass,0,4.35,front-.24,visualShell);
+    box(w*.82,.38,.2,dark,0,5.42,front+.13,visualShell);
     for(let k=0;k<7;k++){
       const z=back+1.7+k*1.88;
-      for(const side of [-1,1])box(.10,1.23,1.46,glass,side*(w*.49),4.43,z,body);
+      for(const side of [-1,1])box(.10,1.23,1.46,glass,side*(w*.49),4.43,z,visualShell);
     }
-    box(.13,2.35,1.5,silver,w*.51,2.93,front-2.0,body);
-    box(w+.15,.21,len*.93,dark,0,2.55,0,body);
-    for(const x of [-1.14,1.14])sphere(.24,lamp,x,6.08,front-.55,body);
-    box(w*.66,.24,.13,dark,0,3.1,front+.25,body);
+    box(.13,2.35,1.5,silver,w*.51,2.93,front-2.0,visualShell);
+    box(w+.15,.21,len*.93,dark,0,2.55,0,visualShell);
+    for(const x of [-1.14,1.14])sphere(.24,lamp,x,6.08,front-.55,visualShell);
+    box(w*.66,.24,.13,dark,0,3.1,front+.25,visualShell);
   }else if(vehicleIndex===4){ // Compactador traseiro do caminhão de lixo
-    box(w*.9,2.35,len*.38,paint,0,3.22,front-len*.23,body);
-    box(w*.73,.82,.16,glass,0,3.78,front-.32,body);
-    box(w*.95,3.25,len*.58,mat(0x406751,.68,.3),0,3.65,back+len*.30,body);
-    for(const side of [-1,1])for(const z of [back+1.2,back+3.2,back+5.2])box(.18,2.6,.28,metal,side*w*.49,3.72,z,body);
-    box(w+.18,2.75,.48,metal,0,3.1,back-.18,body);
-    box(w*.72,.65,.38,dark,0,1.25,back-.65,body);
-    for(const x of [-w*.39,w*.39])box(.32,3.0,.42,metal,x,3.8,back-.17,body);
+    box(w*.9,2.35,len*.38,paint,0,3.22,front-len*.23,visualShell);
+    box(w*.73,.82,.16,glass,0,3.78,front-.32,visualShell);
+    box(w*.95,3.25,len*.58,mat(0x406751,.68,.3),0,3.65,back+len*.30,visualShell);
+    for(const side of [-1,1])for(const z of [back+1.2,back+3.2,back+5.2])box(.18,2.6,.28,metal,side*w*.49,3.72,z,visualShell);
+    box(w+.18,2.75,.48,metal,0,3.1,back-.18,visualShell);
+    box(w*.72,.65,.38,dark,0,1.25,back-.65,visualShell);
+    for(const x of [-w*.39,w*.39])box(.32,3.0,.42,metal,x,3.8,back-.17,visualShell);
   }else if(vehicleIndex===5){ // Van de sorvete de visual original
-    box(w*.92,2.2,len*.84,mat(0xf7efe5,.85),0,3.03,-.2,body);
-    box(w*.85,.92,.16,glass,0,3.65,front-1,body);
-    box(w*.97,.46,len*.93,paint,0,4.39,-.15,body);
-    box(.12,1.05,2.4,glass,w*.47,3.25,-.8,body);
-    box(w*.71,.30,2,mat(0x60b0c2),0,4.69,-.9,body);
-    const ice=mesh(new THREE.ConeGeometry(.72,1.5,9),mat(0xd9a25b),0,5.46,back+2.0,body);ice.rotation.z=Math.PI;
-    sphere(.83,mat(0xffc0d8,.8),0,6.15,back+2.0,body);
-    for(const side of [-1,1])box(.15,.47,2.25,paint,side*w*.46,2.38,back+2.55,body);
+    box(w*.92,2.2,len*.84,mat(0xf7efe5,.85),0,3.03,-.2,visualShell);
+    box(w*.85,.92,.16,glass,0,3.65,front-1,visualShell);
+    box(w*.97,.46,len*.93,paint,0,4.39,-.15,visualShell);
+    box(.12,1.05,2.4,glass,w*.47,3.25,-.8,visualShell);
+    box(w*.71,.30,2,mat(0x60b0c2),0,4.69,-.9,visualShell);
+    const ice=mesh(new THREE.ConeGeometry(.72,1.5,9),mat(0xd9a25b),0,5.46,back+2.0,visualShell);ice.rotation.z=Math.PI;
+    sphere(.83,mat(0xffc0d8,.8),0,6.15,back+2.0,visualShell);
+    for(const side of [-1,1])box(.15,.47,2.25,paint,side*w*.46,2.38,back+2.55,visualShell);
   }else if(vehicleIndex===6){ // Guincho com lança, cabo e gancho traseiro
-    box(w*.91,2.3,len*.34,paint,0,3.2,front-len*.2,body);
-    box(w*.76,.82,.17,glass,0,3.73,front-.34,body);
-    box(w*.88,.34,len*.54,metal,0,2.35,back+len*.30,body);
-    for(const x of [-w*.38,w*.38])box(.23,1.75,len*.55,silver,x,3.11,back+len*.3,body);
-    const boom=box(.66,.67,len*.49,metal,0,4.35,back+len*.27,body);boom.rotation.x=-.25;
-    box(.15,1.95,.14,dark,0,4.0,back-.42,body);
-    const hook=mesh(new THREE.TorusGeometry(.42,.14,7,11,Math.PI*1.55),silver,0,2.99,back-.48,body);hook.rotation.z=.4;
+    box(w*.91,2.3,len*.34,paint,0,3.2,front-len*.2,visualShell);
+    box(w*.76,.82,.17,glass,0,3.73,front-.34,visualShell);
+    box(w*.88,.34,len*.54,metal,0,2.35,back+len*.30,visualShell);
+    for(const x of [-w*.38,w*.38])box(.23,1.75,len*.55,silver,x,3.11,back+len*.3,visualShell);
+    const boom=box(.66,.67,len*.49,metal,0,4.35,back+len*.27,visualShell);boom.rotation.x=-.25;
+    box(.15,1.95,.14,dark,0,4.0,back-.42,visualShell);
+    const hook=mesh(new THREE.TorusGeometry(.42,.14,7,11,Math.PI*1.55),silver,0,2.99,back-.48,visualShell);hook.rotation.z=.4;
   }else if(vehicleIndex===7){ // Bombeiro: tanque, escada e sinalização
-    box(w*.93,2.42,len*.36,paint,0,3.18,front-len*.2,body);
-    box(w*.8,.82,.18,glass,0,3.64,front-.3,body);
-    box(w*.88,2.4,len*.6,paint,0,3.2,back+len*.31,body);
-    box(w*.73,.56,len*.5,silver,0,4.78,back+len*.3,body);
-    for(const x of [-.75,.75])box(.18,.17,len*.61,metal,x,5.27,back+len*.29,body);
-    for(let z=back+1.05;z<front-3;z+=.65)box(1.75,.14,.18,silver,0,5.27,z,body);
-    for(const x of [-.89,.89])sphere(.39,mat(x<0?0x377edd:0xea3838,.25,.1,{emissive:x<0?0x192966:0x8d1111,emissiveIntensity:1.2}),x,5.09,front-2.1,body);
-    box(w+.06,.21,len*.86,mat(0xeac8a0),0,2.66,0,body);
+    box(w*.93,2.42,len*.36,paint,0,3.18,front-len*.2,visualShell);
+    box(w*.8,.82,.18,glass,0,3.64,front-.3,visualShell);
+    box(w*.88,2.4,len*.6,paint,0,3.2,back+len*.31,visualShell);
+    box(w*.73,.56,len*.5,silver,0,4.78,back+len*.3,visualShell);
+    for(const x of [-.75,.75])box(.18,.17,len*.61,metal,x,5.27,back+len*.29,visualShell);
+    for(let z=back+1.05;z<front-3;z+=.65)box(1.75,.14,.18,silver,0,5.27,z,visualShell);
+    for(const x of [-.89,.89])sphere(.39,mat(x<0?0x377edd:0xea3838,.25,.1,{emissive:x<0?0x192966:0x8d1111,emissiveIntensity:1.2}),x,5.09,front-2.1,visualShell);
+    box(w+.06,.21,len*.86,mat(0xeac8a0),0,2.66,0,visualShell);
   }else if(vehicleIndex===8){ // Patrulha blindada e sirene
-    box(w*.86,1.75,len*.58,dark,0,2.95,-.3,body);
-    box(w*.75,.84,.14,glass,0,3.11,1.89,body);
-    box(w*.95,.42,len*.27,paint,0,2.14,len*.34,body);
-    box(w*.91,.21,len*.51,paint,0,3.94,-.25,body);
-    box(2.1,.31,.75,metal,0,4.26,0,body);
-    for(const x of [-.65,.65])box(.83,.24,.78,mat(x<0?0x377dff:0xfd4650,.32,.25,{emissive:x<0?0x0e48ce:0xc61b30,emissiveIntensity:1.15}),x,4.28,0,body);
-    box(.15,.9,1.2,glass,w*.46,3.0,.2,body);
+    box(w*.86,1.75,len*.58,dark,0,2.95,-.3,visualShell);
+    box(w*.75,.84,.14,glass,0,3.11,1.89,visualShell);
+    box(w*.95,.42,len*.27,paint,0,2.14,len*.34,visualShell);
+    box(w*.91,.21,len*.51,paint,0,3.94,-.25,visualShell);
+    box(2.1,.31,.75,metal,0,4.26,0,visualShell);
+    for(const x of [-.65,.65])box(.83,.24,.78,mat(x<0?0x377dff:0xfd4650,.32,.25,{emissive:x<0?0x0e48ce:0xc61b30,emissiveIntensity:1.15}),x,4.28,0,visualShell);
+    box(.15,.9,1.2,glass,w*.46,3.0,.2,visualShell);
   }else if(vehicleIndex===9){ // Monster truck: suspensão exposta, rollcage e admissão
-    box(w*.84,1.2,len*.69,paint,0,2.76,.25,body);
-    box(w*.78,1.35,len*.37,dark,0,3.75,-.9,body);
-    box(w*.76,.79,.16,glass,0,3.85,.88,body);
+    box(w*.84,1.2,len*.69,paint,0,2.76,.25,visualShell);
+    box(w*.78,1.35,len*.37,dark,0,3.75,-.9,visualShell);
+    box(w*.76,.79,.16,glass,0,3.85,.88,visualShell);
     for(const x of [-w*.4,w*.4]){
-      box(.18,1.7,len*.43,metal,x,3.65,-.9,body);
-      box(.3,.4,len*.93,silver,x,1.6,0,body);
+      box(.18,1.7,len*.43,metal,x,3.65,-.9,visualShell);
+      box(.3,.4,len*.93,silver,x,1.6,0,visualShell);
     }
-    box(.88,1.1,.88,dark,0,3.49,2.15,body);
-    box(w*.5,.3,len*.4,metal,0,4.6,-.6,body);
-    for(const x of [-1.5,1.5])box(.3,.7,.4,rust,x,3.27,len*.3,body);
+    box(.88,1.1,.88,dark,0,3.49,2.15,visualShell);
+    box(w*.5,.3,len*.4,metal,0,4.6,-.6,visualShell);
+    for(const x of [-1.5,1.5])box(.3,.7,.4,rust,x,3.27,len*.3,visualShell);
   }
-  addVehicleDetails(body,garage,vehicleIndex,paint,metal,dark);
+  addVehicleDetails(visualShell,garage,vehicleIndex,paint,metal,dark);
   // Conjuntos de rodas em seus próprios suportes de suspensão. A roda gira
   // independentemente do balanço da lataria; cada suporte absorve um solavanco.
   const wheels=[],wheelMounts=[];
-  const wheelZ=garage.length>12?[-len*.38,0,len*.37]:garage.length>10?[-len*.35,len*.33]:[-len*.33,len*.34];
-  for(const x of [-w*.55,w*.55])for(const z of wheelZ){
-    const assembly=new THREE.Group();assembly.position.set(x,tw*.9,z);body.add(assembly);
-    const tire=cylinder(tw,tw,Math.min(1.38,tw*.85),M.tire,0,0,0,assembly,14);tire.rotation.z=Math.PI/2;
-    const rim=cylinder(tw*.48,tw*.48,Math.min(1.4,tw*.85)+.05,M.rim,0,0,0,assembly,12);rim.rotation.z=Math.PI/2;
-    cylinder(tw*.20,tw*.20,Math.min(1.45,tw*.85)+.12,M.dark,0,0,0,assembly,10).rotation.z=Math.PI/2;
-    for(let b=0;b<5;b++){
-      const a=b*Math.PI*2/5;
-      sphere(.075,M.chrome,x>0?.72:-.72,Math.sin(a)*tw*.34,Math.cos(a)*tw*.34,assembly,6,5);
+  if(vehicleIndex===10){
+    for(const z of [-len*.31,len*.31]){
+      const assembly=new THREE.Group();assembly.position.set(0,tw*.98,z);body.add(assembly);
+      const tire=cylinder(tw,tw,Math.min(.72,tw*.58),M.tire,0,0,0,assembly,18);tire.rotation.z=Math.PI/2;
+      const rim=cylinder(tw*.46,tw*.46,Math.min(.8,tw*.58)+.04,M.rim,0,0,0,assembly,14);rim.rotation.z=Math.PI/2;
+      cylinder(tw*.18,tw*.18,Math.min(.84,tw*.58)+.08,M.dark,0,0,0,assembly,12).rotation.z=Math.PI/2;
+      for(let b=0;b<5;b++){
+        const a=b*Math.PI*2/5;
+        sphere(.055,M.chrome,0,Math.sin(a)*tw*.28,Math.cos(a)*tw*.28,assembly,6,5);
+      }
+      wheels.push(tire,rim);
+      wheelMounts.push({group:assembly,x:0,z,baseY:tw*.98,travel:0,velocity:0});
     }
-    wheels.push(tire,rim);
-    wheelMounts.push({group:assembly,x,z,baseY:tw*.9,travel:0,velocity:0});
+  }else{
+    const wheelZ=garage.length>12?[-len*.38,0,len*.37]:garage.length>10?[-len*.35,len*.33]:[-len*.33,len*.34];
+    for(const x of [-w*.55,w*.55])for(const z of wheelZ){
+      const assembly=new THREE.Group();assembly.position.set(x,tw*.9,z);body.add(assembly);
+      const tire=cylinder(tw,tw,Math.min(1.38,tw*.85),M.tire,0,0,0,assembly,14);tire.rotation.z=Math.PI/2;
+      const rim=cylinder(tw*.48,tw*.48,Math.min(1.4,tw*.85)+.05,M.rim,0,0,0,assembly,12);rim.rotation.z=Math.PI/2;
+      cylinder(tw*.20,tw*.20,Math.min(1.45,tw*.85)+.12,M.dark,0,0,0,assembly,10).rotation.z=Math.PI/2;
+      for(let b=0;b<5;b++){
+        const a=b*Math.PI*2/5;
+        sphere(.075,M.chrome,x>0?.72:-.72,Math.sin(a)*tw*.34,Math.cos(a)*tw*.34,assembly,6,5);
+      }
+      wheels.push(tire,rim);
+      wheelMounts.push({group:assembly,x,z,baseY:tw*.9,travel:0,velocity:0});
+    }
   }
   // Armas montadas acima da carroceria, mesmo em veículos altos.
-  const mountHeight=[3.65,3.2,4.82,6.45,5.58,4.98,5.3,5.8,4.59,5.17][vehicleIndex];
+  const mountHeight=[3.65,3.2,4.82,6.45,5.58,4.98,5.3,5.8,4.59,5.17,3.05][vehicleIndex] ?? 3.8;
   const turret=new THREE.Group();turret.position.set(0,mountHeight,.4);body.add(turret);
   cylinder(.83,.96,.58,silver,0,0,0,turret,10);
   for(const x of [-.41,.41]){
@@ -546,14 +804,14 @@ function createKart(color,name,isPlayer=false,vehicleIndex=0){
   const labelTexture=makeCanvasText(name,'#171a22',isPlayer?'#f6c869':'#ffffff',.81);
   const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:labelTexture,transparent:true,depthWrite:false}));sprite.position.set(0,mountHeight+3,0);sprite.scale.set(12,3,1);g.add(sprite);
   const damageRig=buildDamageRig(body,garage,vehicleIndex,color);
-  const car={id:cars.length,name,color,group:g,body,turret,wheels,sprite,paint,damageRig,wheelMounts,sideVelocity:0,suspension:{height:0,verticalSpeed:0,roll:0,rollSpeed:0,pitch:0,pitchSpeed:0,impact:0},damageLevel:0,damageSide:'right',burnTime:0,damageImpacts:0,x:0,z:0,yaw:0,speed:0,
+  const car={id:cars.length,name,color,group:g,body,visualShell,assetSkin:null,assetMaterials:null,assetMorphMeshes:[],assetDentStamp:null,turret,wheels,sprite,paint,damageRig,wheelMounts,sideVelocity:0,suspension:{height:0,verticalSpeed:0,roll:0,rollSpeed:0,pitch:0,pitchSpeed:0,impact:0},damageLevel:0,damageSide:'right',burnTime:0,damageImpacts:0,x:0,z:0,yaw:0,speed:0,
     radius:bodyRadius(garage),hp:100,nitro:75,ammo:5,item:null,shield:0,slowTime:0,driftTime:0,drifting:false,boosting:false,boostTime:0,
     lap:1,score:0,wrecks:0,alive:true,invuln:0,isPlayer,steer:0,acc:0,brake:0,useDrift:false,useNitro:false,
     ramCooldown:0,fireCooldown:0,gunCooldown:0,gunHeat:0,gunLocked:false,specialCharge:100,
     boostPadCooldown:0,smokeClock:0,aiOffset:rand(-2,2),aiTarget:null,aiThink:0,
     aiState:'hunt',aiFlankSide:(cars.length%2?1:-1),aiStuck:0,aiReverse:0,aiLastX:0,aiLastZ:0,aiHeading:0,aiGoal:null,aiPersonality:['hunter','flanker','brawler','scavenger'][cars.length%4],
     lastAttacker:null,damageFlash:0,crashCount:0,garage,vehicleIndex};
-  cars.push(car);return car;
+  cars.push(car);attachVehicleAsset(car);return car;
 }
 
 // Partes independentes. As texturas e os objetos são gerados localmente, sem assets pagos.
@@ -577,7 +835,7 @@ function buildDamageRig(body,garage,vehicleIndex,paintHex){
   crackGroup.visible=false;
   // Rachaduras frontais e laterais que aparecem após dano leve.
   const windshield=[[2.74,len*.08],[2.74,len*.08],[3.75,front-.38],[4.35,front-.24],
-    [3.78,front-.32],[3.65,front-1],[3.73,front-.34],[3.64,front-.3],[3.11,1.89],[3.85,.88]][vehicleIndex];
+    [3.78,front-.32],[3.65,front-1],[3.73,front-.34],[3.64,front-.3],[3.11,1.89],[3.85,.88],[2.32,front-.48]][vehicleIndex] ?? [2.7,front-.4];
   const [crackY,crackZ]=windshield;
   for(const [x,y,len2,rot] of [[-.65,0,1.1,.48],[.25,.15,1.35,-.65],[1.0,-.2,.84,.42],[-.2,-.34,.82,1.2]]){
     const shard=box(.075,len2,.07,cracks,x,crackY+y,crackZ+.14,crackGroup);shard.rotation.z=rot;shard.castShadow=false;
@@ -607,6 +865,8 @@ function scatterVehiclePart(car,part){
 }
 function syncDamageVisuals(car){
   if(!car?.damageRig)return;
+  applyAssetDamageTint(car);
+  applyAssetDents(car);
   const health=clamp(car.hp,0,100),rig=car.damageRig;
   const level=health<=0?5:health<20?4:health<40?3:health<65?2:health<83?1:0;
   if(level>rig.lastStage){
@@ -675,11 +935,11 @@ function disposeDynamic(root){
   const shared=new Set(Object.values(M)), seenGeo=new Set(),seenMat=new Set();
   function visit(obj){
     for(const child of obj.children||[])visit(child);
-    if(obj.geometry&&obj.geometry!==particleGeo&&!seenGeo.has(obj.geometry)){obj.geometry.dispose?.();seenGeo.add(obj.geometry);}
+    if(obj.geometry&&obj.geometry!==particleGeo&&!assetSharedGeometries.has(obj.geometry)&&!seenGeo.has(obj.geometry)){obj.geometry.dispose?.();seenGeo.add(obj.geometry);}
     const materials=Array.isArray(obj.material)?obj.material:[obj.material];
     for(const material of materials){
-      if(!material||shared.has(material)||seenMat.has(material))continue;
-      seenMat.add(material);material.map?.dispose?.();material.dispose?.();
+      if(!material||shared.has(material)||assetSharedMaterials.has(material)||seenMat.has(material))continue;
+      seenMat.add(material);if(material.map&&!assetSharedTextures.has(material.map))material.map.dispose?.();material.dispose?.();
     }
   }
   visit(root);scene.remove(root);
@@ -1269,8 +1529,15 @@ function useSpecial(c){
     c.shield=Math.max(c.shield,2.5);
     emitBurst(c.x+Math.sin(c.yaw)*5,c.z+Math.cos(c.yaw)*5,0x8bc76d,45,6);
   }else if(kind==='frost'){
-    for(const e of near(31)){takeDamage(e,17,c);e.slowTime=Math.max(e.slowTime,5);e.speed*=.37;}
-    emitBurst(c.x,c.z,0x9eebff,65,10);
+    if(c.vehicleIndex===5){
+      for(const spread of [-.34,-.17,0,.17,.34])spawnCandyRocket(c,spread,94+Math.abs(spread)*8);
+      c.boostTime=Math.max(c.boostTime,1.2);c.shield=Math.max(c.shield,1.35);c.nitro=Math.min(100,c.nitro+12);
+      emitBurst(c.x,c.z,0xf8b7ff,46,7);emitCandyConfetti(c.x,c.z,34,5);emitSweetToothBurst(c,36);
+      playSound('pickup');
+    }else{
+      for(const e of near(31)){takeDamage(e,17,c);e.slowTime=Math.max(e.slowTime,5);e.speed*=.37;}
+      emitBurst(c.x,c.z,0x9eebff,65,10);
+    }
   }else if(kind==='hook'){
     const target=forward(48,.52).sort((a,b)=>vec2Dist(c,a)-vec2Dist(c,b))[0];
     if(target){const dist=vec2Dist(c,target),pull=clamp(dist-6,0,20);
@@ -1430,6 +1697,7 @@ function updateWorldVisual(dt){
     if(c.damageRig?.fireGroup?.visible){c.damageRig.fireGroup.scale.y=1+Math.sin(visualClock*14+c.id)*.16;}
     if(!c.alive && c.burnTime>0){c.burnTime-=dt;c.smokeClock-=dt;if(c.smokeClock<=0){emitSmoke(c.x,c.z,0x252a2f);c.smokeClock=.14;}
       if(c.burnTime<=0)c.damageRig.fireGroup.visible=false;}
+    if(c.assetFx&&c.alive)updateVehicleAssetFx(c,dt);
   }
   if(gameState==='playing')for(const c of cars){
     if(!c.alive)continue;
@@ -1592,7 +1860,7 @@ function resize(){
   renderer.setPixelRatio(Math.min(devicePixelRatio,limit));
 }
 function populateGarage(){
-  const thumbs=['marauder','phantom','titan','omega-bus','grinder','frost-van','hookjaw','inferno','sentinel','goliath'];
+  const thumbs=['marauder','phantom','titan','omega-bus','grinder','frost-van','hookjaw','inferno','sentinel','goliath','reaper-bike'];
   const grid=document.getElementById('garageGrid');
   if(!grid)return;
   grid.innerHTML=GARAGE.map((v,i)=>{
@@ -1602,7 +1870,7 @@ function populateGarage(){
     const stars=n=>'★'.repeat(n)+'☆'.repeat(5-n);
     return `<button class="garage-card ${i===garageChoice?'active':''}" data-vehicle="${i}" aria-pressed="${i===garageChoice}">
       <span class="car-stripe" style="background:#${v.color.toString(16).padStart(6,'0')}"></span>
-      <img class="garage-thumb" src="previews/carro-${String(i+1).padStart(2,'0')}-${thumbs[i]}.png" alt="Modelo 3D de ${v.name}" loading="lazy"><b>${v.name}</b><small>${v.className}</small>
+      <img class="garage-thumb" src="previews/modelo-${thumbs[i]}-${thumbs[i]==='reaper-bike'?'v7.4':'v7.3'}.png" alt="Modelo 3D de ${v.name}" loading="lazy"><b>${v.name}</b><small>${v.className}</small>
       <span class="special-name">☄ ${v.special}</span>
       <em>BLINDAGEM ${stars(armor)}<br>VELOCIDADE ${stars(speed)}<br>IMPACTO ${stars(force)}</em>
     </button>`;
@@ -1673,6 +1941,7 @@ async function boot(){
     followLook=new THREE.Vector3();
     clock=new THREE.Clock();
     setup3D();$('loading').classList.add('hidden');clock.start();loop();
+    void startVehicleAssets();
   }catch(err){
     $('loading').classList.add('hidden');$('errorText').textContent=String(err.stack||err);
     $('errorPanel').classList.remove('hidden');console.error(err);

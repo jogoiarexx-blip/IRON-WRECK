@@ -33,6 +33,7 @@ class FakeInstancedMesh extends Node {
   computeBoundingSphere(){}
 }
 T.Object3D=Node;T.InstancedMesh=FakeInstancedMesh;
+
 const nodes=new Map();
 function el(id){if(!nodes.has(id))nodes.set(id,{style:{},classList:{add(){},remove(){},toggle(){}},textContent:'',innerHTML:'',dataset:{mode:'race'},appendChild(){},addEventListener(){},getContext(){return canvasContext;}});return nodes.get(id);}
 const canvasContext={fillRect(){},strokeRect(){},fillText(){},clearRect(){},beginPath(){},arc(){},ellipse(){},rect(){},closePath(){},moveTo(){},lineTo(){},stroke(){},fill(){}};
@@ -121,18 +122,18 @@ console.log('PASS: derrota quando jogador perde toda a blindagem.');
 
 // v3.0: a garagem deve conter dez modelos realmente diferentes, com massa,
 // dimensões, controles e habilidades especiais próprias.
-assert.equal(run('GARAGE.length'),10,'garagem de dez veículos');
+assert.equal(run('GARAGE.length'),11,'garagem de onze veículos');
 assert.equal(run('new Set(GARAGE.map(v=>v.specialType)).size'),10,'dez especiais distintos');
-assert.equal(run('new Set(GARAGE.map(v=>v.length)).size'),10,'comprimentos únicos');
+assert.equal(run('new Set(GARAGE.map(v=>v.length)).size'),11,'comprimentos únicos');
 assert(run('GARAGE[3].length>GARAGE[0].length*1.7'),'ônibus comprido');
 assert(run('GARAGE[4].mass>GARAGE[1].mass*2.5'),'caminhão de lixo pesado');
-for(const stage of ['wasteland','city'])for(let vi=0;vi<10;vi++){
+for(const stage of ['wasteland','city'])for(let vi=0;vi<11;vi++){
  run(`garageChoice=${vi};resetGame('${stage}');held.clear()`);
  assert.equal(run('player.vehicleIndex'),vi);
  assert.equal(run('player.garage.name'),run(`GARAGE[${vi}].name`));
  assert(run('player.radius')>2.1);
- assert(run('player.body.children.length')>13,'malha de veículo precisa ter detalhes');
- assert(run('player.wheels.length')>=8,'rodas precisam existir');
+ assert(run('player.vehicleIndex===10 ? player.body.children.length>8 : player.body.children.length>13'),'malha de veículo precisa ter detalhes');
+ assert(run('player.vehicleIndex===10 ? player.wheels.length>=4 : player.wheels.length>=8'),'rodas precisam existir');
  assert.equal(run('cars.length'),8,'sempre 8 carros');
  assert.equal(run('new Set(cars.slice(1).map(c=>c.vehicleIndex)).size'),7,'adversários variados');
  // IA não deve gerar NaN em 180 quadros em nenhuma combinação.
@@ -180,7 +181,7 @@ for(const stage of ['wasteland','city','harbor']){
   assert(Number.isFinite(run('player.x')));
  }
 }
-console.log('PASS: 30 configurações (10 veículos × 3 arenas) com danos, sucata e reparos.');
+console.log('PASS: 33 configurações (11 veículos × 3 arenas) com danos, sucata e reparos.');
 run("garageChoice=3;resetGame('harbor');player.hp=15;syncDamageVisuals(player)");
 assert(run('player.damageRig.fireGroup.visible'),'fogo deve estar visível em veículo crítico');
 assert(run('player.damageRig.tirePunctured'),'pneu deve furar com HP crítico');
